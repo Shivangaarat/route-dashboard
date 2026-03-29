@@ -241,6 +241,8 @@ export default function Dashboard() {
   const [loading, setLoading]       = useState(false)
   const [uploading, setUploading]   = useState(false)
   const [uploadMsg, setUploadMsg]   = useState('')
+  const [pendingDates, setPendingDates] = useState([])
+  const [recalcStatus, setRecalcStatus] = useState({})
   const [tourFilter, setTourFilter] = useState('all')
   const [emiratesCat, setEmiCat]    = useState('Overall')
   const [exclusions, setExclusions] = useState([])
@@ -324,9 +326,15 @@ export default function Dashboard() {
       const r = await fetch('/api/ingest', { method:'POST', body:fd })
       const d = await r.json()
       if (d.status==='success') {
-        setUploadMsg(`✓ ${d.rows_saved} rows saved for ${d.dates?.join(', ')}`)
-        const dates = await fetch('/api/analytics?view=dates').then(r=>r.json())
-        setDates(dates.dates||[])
+        if (d.kpi_skipped) {
+          setUploadMsg(`✓ ${d.rows_saved} rows saved for ${d.dates?.length} dates. Click Recalculate below for each date.`)
+          setPendingDates(d.dates || [])
+        } else {
+          setUploadMsg(`✓ ${d.rows_saved} rows saved and KPIs calculated for ${d.dates?.join(', ')}`)
+          setPendingDates([])
+        }
+        const datesRes = await fetch('/api/analytics?view=dates').then(r=>r.json())
+        setDates(datesRes.dates||[])
         if (d.dates?.[0]) setDate(d.dates[0])
       } else {
         setUploadMsg(`Error: ${d.error}`)
@@ -334,6 +342,25 @@ export default function Dashboard() {
     } catch(err) { setUploadMsg(`Error: ${err.message}`) }
     setUploading(false)
   }, [])
+
+  const handleRecalculate = async (date) => {
+    setRecalcStatus(s => ({...s, [date]: 'calculating...'}))
+    try {
+      const r = await fetch('/api/recalculate', {method:'POST', body:JSON.stringify({date}), headers:{'Content-Type':'application/json'}})
+      const d = await r.json()
+      if (d.status==='success') {
+        setRecalcStatus(s => ({...s, [date]: '✓ done'}))
+        setPendingDates(p => p.filter(pd => pd !== date))
+        const datesRes = await fetch('/api/analytics?view=dates').then(r=>r.json())
+        setDates(datesRes.dates||[])
+        setDate(date)
+      } else {
+        setRecalcStatus(s => ({...s, [date]: `Error: ${d.error}`}))
+      }
+    } catch(e) {
+      setRecalcStatus(s => ({...s, [date]: `Error: ${e.message}`}))
+    }
+  }
 
   const handleVehicleUpload = async () => {
     const vf = vehicleFileRef.current?.files?.[0]
@@ -404,6 +431,30 @@ export default function Dashboard() {
         <div style={{fontSize:12,color:'#73726c',marginTop:3}}>Auto-schedule reads from locus-exports@akigroup.com at 6am Mon–Fri</div>
         {uploadMsg && <div style={{fontSize:12,marginTop:6,color:uploadMsg.startsWith('✓')?C.good:C.bad}}>{uploadMsg}</div>}
       </label>
+      {pendingDates.length > 0 && (
+        <div style={{background:'#FFF8E1',border:'0.5px solid #F0C040',borderRadius:10,padding:'12px 16px',marginBottom:'1rem'}}>
+          <div style={{fontSize:12,fontWeight:600,color:'#7F5003',marginBottom:8}}>
+            KPI calculation pending for {pendingDates.length} date(s) — click Recalculate for each:
+          </div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {pendingDates.map(date => (
+              <div key={date} style={{display:'flex',alignItems:'center',gap:6}}>
+                <button onClick={()=>handleRecalculate(date)} style={{
+                  padding:'5px 14px',borderRadius:8,fontSize:12,cursor:'pointer',
+                  border:'0.5px solid #F0C040',background:'#FFF',color:'#7F5003',fontWeight:500
+                }}>
+                  {recalcStatus[date] === 'calculating...' ? '⟳ Calculating...' : `Recalculate ${date}`}
+                </button>
+                {recalcStatus[date] && recalcStatus[date] !== 'calculating...' && (
+                  <span style={{fontSize:11,color:recalcStatus[date].startsWith('✓')?C.good:C.bad}}>
+                    {recalcStatus[date]}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* KPI strip */}
       {summary.length > 0 && (() => {

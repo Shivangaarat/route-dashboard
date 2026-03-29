@@ -232,22 +232,29 @@ export async function POST(request) {
     }
 
     // ── Run KPI engine per date ───────────────────────────────────────────────
+    // For large files (multiple dates or >1500 rows), skip KPI and let user trigger manually
+    const skipKPI = dates.length > 1 || tasks.length > 1500
     const kpiResults = []
-    for (const date of dates) {
-      try {
-        const result = await recalculateDay(date)
-        kpiResults.push(result)
-      } catch (e) {
-        kpiResults.push({ date, error: e.message })
+
+    if (!skipKPI) {
+      for (const date of dates) {
+        try {
+          const result = await recalculateDay(date)
+          kpiResults.push(result)
+        } catch (e) {
+          kpiResults.push({ date, error: e.message })
+        }
       }
     }
 
     return Response.json({
-      status:      'success',
-      rows_parsed: tasks.length,
-      rows_saved:  upserted,
+      status:        'success',
+      rows_parsed:   tasks.length,
+      rows_saved:    upserted,
       dates,
-      kpi_results: kpiResults,
+      kpi_results:   kpiResults,
+      kpi_skipped:   skipKPI,
+      kpi_message:   skipKPI ? `${dates.length} dates saved. Click "Recalculate" for each date to compute KPIs.` : null,
     })
 
   } catch (err) {
