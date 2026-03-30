@@ -161,11 +161,12 @@ export async function POST(request) {
              root_cause,operating_unit,organisation,division,internal_org,category,
              invoice_value,upload_source)
       ON CONFLICT (task_id, dispatch_date) DO UPDATE SET
-        task_status   = EXCLUDED.task_status,
-        is_completed  = EXCLUDED.is_completed,
-        is_failed     = EXCLUDED.is_failed,
-        root_cause    = EXCLUDED.root_cause,
-        upload_source = EXCLUDED.upload_source
+        task_status      = EXCLUDED.task_status,
+        is_completed     = EXCLUDED.is_completed,
+        is_failed        = EXCLUDED.is_failed,
+        root_cause       = EXCLUDED.root_cause,
+        operating_unit   = EXCLUDED.operating_unit,
+        upload_source    = EXCLUDED.upload_source
     `
 
     // ── For single-date uploads only, run KPI immediately ────────────────────
