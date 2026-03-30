@@ -409,10 +409,16 @@ export default function Dashboard() {
           <div style={{fontSize:12,color:'#73726c',marginTop:2}}>Daily · MTD · YTD · Emirates · Re-deliveries · Settings</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-          <select value={selectedDate} onChange={e=>setDate(e.target.value)}
-            style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff'}}>
-            {dates.map(d=><option key={d.dispatch_date} value={d.dispatch_date}>{d.dispatch_date} — {num(d.total_orders)} orders</option>)}
-          </select>
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+            <div style={{fontSize:11,color:'#73726c'}}>From</div>
+            <input type="date" value={selectedDate} onChange={e=>setDate(e.target.value)}
+              style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff'}}/>
+            <div style={{fontSize:11,color:'#73726c'}}>Available:</div>
+            <select value={selectedDate} onChange={e=>setDate(e.target.value)}
+              style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff',maxWidth:220}}>
+              {dates.map(d=><option key={d.dispatch_date} value={d.dispatch_date}>{d.dispatch_date} — {num(d.total_orders)} orders</option>)}
+            </select>
+          </div>
           <button onClick={()=>window.open(`/api/export?date=${selectedDate}&format=xlsx`,'_blank')}
             style={{fontSize:12,padding:'5px 14px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
             Export Excel
@@ -667,7 +673,10 @@ export default function Dashboard() {
                   r.was_delivered ? <Pill text="Yes" color={C.good} bg={C.bgGood}/> : <Pill text="No" color={C.bad} bg={C.bgBad}/>,
                 ])}
               />
-            ) : <div style={{color:'#73726c',fontSize:13}}>No re-deliveries found yet. Data builds as you upload more daily files.</div>}
+            ) : <div style={{color:'#73726c',fontSize:13,lineHeight:1.8}}>
+              No re-deliveries detected yet.<br/>
+              <span style={{fontSize:12}}>Re-deliveries are identified when the same Task ID appears as FAILED on one date and COMPLETED on a later date. Make sure you have recalculated KPIs for all uploaded dates using the Recalculate buttons that appear after uploading.</span>
+            </div>}
           </Card>
         </>
       )}
