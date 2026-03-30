@@ -94,6 +94,7 @@ export async function POST(request) {
         is_completed:      taskStatus === 'COMPLETED',
         is_failed:         ['FAILED','CANCELLED','REJECTED','NOT DELIVERED','UNDELIVERED'].some(s=>taskStatus.includes(s)),
         root_cause:        String(get('ROOT CAUSE','Cancel reason') || '').trim(),
+        operating_unit:    String(get('OPERATING UNIT','operating_unit') || '').trim(),
         organisation:      String(get('ORGANISATION') || '').trim(),
         division:          String(get('DIVISION') || '').trim(),
         internal_org:      String(get('INTERNAL ORG') || '').trim(),
@@ -117,7 +118,7 @@ export async function POST(request) {
         rider_id, rider_name, vehicle_id, vehicle_name, vehicle_reg,
         location_id, location_name, customer_name,
         volume_cbm, weight_kg, task_status, is_completed, is_failed,
-        root_cause, organisation, division, internal_org, category,
+        root_cause, operating_unit, organisation, division, internal_org, category,
         invoice_value, upload_source
       )
       SELECT * FROM unnest(
@@ -145,6 +146,7 @@ export async function POST(request) {
         ${tasks.map(t=>t.is_completed)}::boolean[],
         ${tasks.map(t=>t.is_failed)}::boolean[],
         ${tasks.map(t=>t.root_cause)}::text[],
+        ${tasks.map(t=>t.operating_unit)}::text[],
         ${tasks.map(t=>t.organisation)}::text[],
         ${tasks.map(t=>t.division)}::text[],
         ${tasks.map(t=>t.internal_org)}::text[],
@@ -156,7 +158,7 @@ export async function POST(request) {
              rider_id,rider_name,vehicle_id,vehicle_name,vehicle_reg,
              location_id,location_name,customer_name,
              volume_cbm,weight_kg,task_status,is_completed,is_failed,
-             root_cause,organisation,division,internal_org,category,
+             root_cause,operating_unit,organisation,division,internal_org,category,
              invoice_value,upload_source)
       ON CONFLICT (task_id, dispatch_date) DO UPDATE SET
         task_status   = EXCLUDED.task_status,

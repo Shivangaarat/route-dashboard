@@ -18,6 +18,7 @@ export async function GET(request) {
   const month    = searchParams.get('month')
   const year     = searchParams.get('year') || new Date().getFullYear()
   const category = searchParams.get('category') || 'Overall'
+  const ou = searchParams.get('ou') || 'All'
 
   try {
     const sql = db()
@@ -33,7 +34,15 @@ export async function GET(request) {
         ORDER BY dispatch_date DESC
         LIMIT 90
       `
-      return Response.json({ dates: rows })
+      // Also fetch available operating units
+      const ouRows = await sql`
+        SELECT DISTINCT TRIM(ou_val) AS ou
+        FROM daily_tour_metrics,
+             LATERAL UNNEST(STRING_TO_ARRAY(COALESCE(operating_unit,''), ',')) AS ou_val
+        WHERE ou_val IS NOT NULL AND TRIM(ou_val) != ''
+        ORDER BY ou
+      `
+      return Response.json({ dates: rows, operating_units: ouRows.map(r => r.ou) })
     }
 
     // ── Daily view (supports single date or date range) ─────────────────────
@@ -102,6 +111,7 @@ export async function GET(request) {
           WHERE dispatch_date >= ${date}::date
           AND dispatch_date <= ${dateTo}::date
           AND (analysis_category = ${category} OR ${category} = 'Overall')
+          AND ('All' = ${ou} OR operating_unit ILIKE '%' || ${ou} || '%')
           ORDER BY dispatch_date DESC, is_bulk DESC, unique_drops DESC
           LIMIT 500
         `,

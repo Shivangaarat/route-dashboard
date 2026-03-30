@@ -299,6 +299,23 @@ const EmiratesTable = ({data, category}) => {
   )
 }
 
+
+// ── Operating Unit selector ───────────────────────────────────────────────────
+const OUSelector = ({value, options, onChange}) => (
+  <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+    <span style={{fontSize:11,color:'#73726c'}}>Operating Unit:</span>
+    {['All', ...options].map(ou => (
+      <button key={ou} onClick={()=>onChange(ou)} style={{
+        padding:'4px 12px',fontSize:12,borderRadius:8,cursor:'pointer',
+        border:`0.5px solid ${value===ou?C.blue:'#ccc'}`,
+        background:value===ou?C.bgBlue:'transparent',
+        color:value===ou?C.blue:'#73726c',
+        fontWeight:value===ou?500:400
+      }}>{ou}</button>
+    ))}
+  </div>
+)
+
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [activeTab, setTab]         = useState('daily')
@@ -318,6 +335,8 @@ export default function Dashboard() {
   const [recalcStatus, setRecalcStatus] = useState({})
   const [rdExpandList, setRdExpandList] = useState(false)
   const [rdFilter, setRdFilter] = useState({})
+  const [selectedOU, setSelectedOU] = useState('All')
+  const [availableOUs, setAvailableOUs] = useState([])
   const [tourFilter, setTourFilter] = useState('all')
   const [tourSearch, setTourSearch] = useState({})
   const [emiratesCat, setEmiCat]    = useState('Overall')
@@ -336,6 +355,7 @@ export default function Dashboard() {
   useEffect(() => {
     fetch('/api/analytics?view=dates').then(r=>r.json()).then(d=>{
       setDates(d.dates||[])
+      setAvailableOUs(d.operating_units||[])
       if (d.dates?.length) {
         setDate(d.dates[d.dates.length-1].dispatch_date)
         setDateTo(d.dates[0].dispatch_date)
@@ -350,10 +370,10 @@ export default function Dashboard() {
     if (!selectedDate) return
     setLoading(true)
     const to = dateTo && dateTo >= selectedDate ? dateTo : selectedDate
-    fetch(`/api/analytics?view=daily&date=${selectedDate}&dateTo=${to}&category=Overall`)
+    fetch(`/api/analytics?view=daily&date=${selectedDate}&dateTo=${to}&category=Overall&ou=${selectedOU}`)
       .then(r=>r.json()).then(d=>{ setDailyData(d); setLoading(false) })
       .catch(()=>setLoading(false))
-  }, [selectedDate, dateTo])
+  }, [selectedDate, dateTo, selectedOU])
 
   // Sync dateTo to be at least selectedDate
   useEffect(() => {
@@ -584,7 +604,10 @@ export default function Dashboard() {
           <MetricMatrix data={summary} title={`${dailyData?.isRange ? "Range" : "Daily"} metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}`}/>
 
           <Card>
-            <SectionTitle>Tour detail</SectionTitle>
+            <div style={{marginBottom:12}}>
+            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>{setSelectedOU(v)}} />
+          </div>
+          <SectionTitle>Tour detail</SectionTitle>
             <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
               {cats.map(c=>(
                 <button key={c} onClick={()=>setTourFilter(c)} style={{
@@ -619,6 +642,9 @@ export default function Dashboard() {
                 color:selectedMonth===m?C.blue:'#73726c'
               }}>{new Date(m+'-01').toLocaleString('default',{month:'short',year:'numeric'})}</button>
             ))}
+          </div>
+          <div style={{marginBottom:12}}>
+            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
           </div>
           {mtdData?.summary?.length > 0 && mtdData.summary.every(r=>r) && (
             <MetricMatrix data={mtdData.summary} title={`Month-to-date — ${selectedMonth}`}/>
@@ -682,6 +708,9 @@ export default function Dashboard() {
       {/* ── YTD TAB ──────────────────────────────────────────────────────────── */}
       {activeTab==='ytd' && (
         <>
+          <div style={{marginBottom:12}}>
+            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
+          </div>
           {ytdData?.summary?.length > 0 ? (
             <>
               <Card>
@@ -723,6 +752,9 @@ export default function Dashboard() {
       {activeTab==='emirates' && (
         <Card>
           <SectionTitle>Emirates-wise breakdown — {selectedDate}</SectionTitle>
+          <div style={{marginBottom:12}}>
+            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
+          </div>
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
             {['Overall','NHC Ambient','NHC Frozen','HC'].map(c=>(
               <button key={c} onClick={()=>setEmiCat(c)} style={{
@@ -755,6 +787,9 @@ export default function Dashboard() {
       {/* ── RE-DELIVERIES TAB ────────────────────────────────────────────────── */}
       {activeTab==='redelivery' && (
         <>
+          <div style={{marginBottom:12}}>
+            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
+          </div>
           <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
             <button onClick={()=>{setRD(null);fetch('/api/analytics?view=redelivery').then(r=>r.json()).then(d=>setRD(d))}}
               style={{fontSize:12,padding:'4px 14px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
