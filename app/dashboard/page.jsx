@@ -511,16 +511,22 @@ export default function Dashboard() {
   // Build OU-filtered KPI summary from tour data
   const ouSummary = selectedOU === 'All' ? null : (() => {
     const included = ouFilteredTours.filter(t => !t.is_excluded && !t.is_virtual_vehicle)
-    const totalOrders = ouFilteredTours.reduce((s,t)=>s+(t.total_orders||0),0)
-    const failed = ouFilteredTours.reduce((s,t)=>s+(t.failed_orders||0),0)
-    const drops = included.reduce((s,t)=>s+(t.unique_drops||0),0)
-    const avgDrops = included.length ? (drops/included.length).toFixed(2) : 0
+    const totalOrders = ouFilteredTours.reduce((s,t)=>s+(Number(t.total_orders)||0),0)
+    const failed = ouFilteredTours.reduce((s,t)=>s+(Number(t.failed_orders)||0),0)
+    const completed = ouFilteredTours.reduce((s,t)=>s+(Number(t.completed_orders)||0),0)
+    const drops = included.reduce((s,t)=>s+(Number(t.unique_drops)||0),0)
+    const avgDrops = included.length ? parseFloat((drops/included.length).toFixed(2)) : 0
     const multiTours = included.filter(t=>t.route_type==='Multi')
-    const avgDropsExcl = multiTours.length ? (multiTours.reduce((s,t)=>s+(t.unique_drops||0),0)/multiTours.length).toFixed(2) : 0
+    const avgDropsExcl = multiTours.length
+      ? parseFloat((multiTours.reduce((s,t)=>s+(Number(t.unique_drops)||0),0)/multiTours.length).toFixed(2)) : 0
     const bulkCount = included.filter(t=>t.is_bulk).length
-    const utilTours = included.filter(t=>t.volume_util_pct!=null)
-    const avgUtil = utilTours.length ? (utilTours.reduce((s,t)=>s+(t.volume_util_pct||0),0)/utilTours.length).toFixed(2) : null
-    const rejPct = totalOrders > 0 ? (failed/totalOrders*100).toFixed(2) : 0
+    const utilTours = included.filter(t=>t.volume_util_pct!=null && !isNaN(Number(t.volume_util_pct)))
+    const avgUtil = utilTours.length > 0
+      ? parseFloat((utilTours.reduce((s,t)=>s+(Number(t.volume_util_pct)||0),0)/utilTours.length).toFixed(2))
+      : null
+    const rejPct = totalOrders > 0 ? parseFloat((failed/totalOrders*100).toFixed(2)) : 0
+    const rdOrders = ouFilteredTours.filter(t=>t.rd_orders && t.rd_orders > 0).reduce((s,t)=>s+(Number(t.rd_orders)||0),0)
+    const rdPct = totalOrders > 0 ? parseFloat((rdOrders/totalOrders*100).toFixed(2)) : 0
     return {
       included_tours: included.length,
       total_drops: drops,
@@ -530,8 +536,9 @@ export default function Dashboard() {
       bulk_route_count: bulkCount,
       avg_volume_util_pct: avgUtil,
       daily_rejection_pct: rejPct,
-      rd_pct: null,
-      first_attempt_success_pct: totalOrders>0 ? ((totalOrders-failed)/totalOrders*100).toFixed(2) : null,
+      rd_pct: rdPct,
+      first_attempt_success_pct: totalOrders > 0
+        ? parseFloat((completed/totalOrders*100).toFixed(2)) : null,
     }
   })()
 
