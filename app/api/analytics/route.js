@@ -36,31 +36,90 @@ export async function GET(request) {
       return Response.json({ dates: rows })
     }
 
-    // ── Daily view ────────────────────────────────────────────────────────────
+    // ── Daily view (supports single date or date range) ─────────────────────
     if (view === 'daily') {
       if (!date) return Response.json({ error: 'date required' }, { status: 400 })
+      const dateTo = searchParams.get('dateTo') || date
+      const isRange = dateTo !== date
 
+      if (!isRange) {
+        // Single date — original behaviour
+        const [summary, tours, emiratesData] = await Promise.all([
+          sql`SELECT * FROM daily_summary WHERE dispatch_date = ${date} ORDER BY analysis_category`,
+          sql`SELECT * FROM daily_tour_metrics
+              WHERE dispatch_date = ${date}
+              AND (analysis_category = ${category} OR ${category} = 'Overall')
+              ORDER BY is_bulk DESC, unique_drops DESC`,
+          sql`SELECT * FROM emirates_daily
+              WHERE dispatch_date = ${date}
+              AND analysis_category = ${category}
+              ORDER BY total_drops DESC`
+        ])
+        return Response.json({ date, dateTo, summary, tours, emirates: emiratesData })
+      }
+
+      // Date range — aggregate daily_summary across range
       const [summary, tours, emiratesData] = await Promise.all([
         sql`
-          SELECT * FROM daily_summary
-          WHERE dispatch_date = ${date}
+          SELECT
+            analysis_category,
+            COUNT(DISTINCT dispatch_date)                                   AS days_active,
+            SUM(included_tours)                                             AS included_tours,
+            SUM(excluded_tours)                                             AS excluded_tours,
+            SUM(own_vehicles)                                               AS own_vehicles,
+            SUM(dleased_vehicles)                                           AS dleased_vehicles,
+            SUM(total_drops)                                                AS total_drops,
+            SUM(own_drops)                                                  AS own_drops,
+            SUM(dleased_drops)                                              AS dleased_drops,
+            ROUND(AVG(own_avg_drops),2)                                     AS own_avg_drops,
+            ROUND(AVG(dleased_avg_drops),2)                                 AS dleased_avg_drops,
+            ROUND(AVG(overall_avg_drops),2)                                 AS overall_avg_drops,
+            ROUND(AVG(avg_drops_excl_single),2)                             AS avg_drops_excl_single,
+            SUM(single_drop_count)                                          AS single_drop_count,
+            SUM(multi_drop_vehicle_count)                                   AS multi_drop_vehicle_count,
+            SUM(multi_drop_total)                                           AS multi_drop_total,
+            SUM(single_drop_vehicle_count)                                  AS single_drop_vehicle_count,
+            SUM(single_drop_total)                                          AS single_drop_total,
+            SUM(total_orders)                                               AS total_orders,
+            SUM(completed_orders)                                           AS completed_orders,
+            SUM(failed_orders)                                              AS failed_orders,
+            ROUND(SUM(failed_orders)::numeric/NULLIF(SUM(total_orders),0)*100,2) AS daily_rejection_pct,
+            ROUND(AVG(avg_volume_util_pct),2)                               AS avg_volume_util_pct,
+            ROUND(AVG(avg_pallet_util_pct),2)                               AS avg_pallet_util_pct,
+            SUM(bulk_route_count)                                           AS bulk_route_count,
+            ROUND(AVG(rd_pct),2)                                            AS rd_pct,
+            ROUND(AVG(rd_pharma_pct),2)                                     AS rd_pharma_pct,
+            ROUND(AVG(rd_medlab_pct),2)                                     AS rd_medlab_pct,
+            ROUND(AVG(first_attempt_success_pct),2)                         AS first_attempt_success_pct
+          FROM daily_summary
+          WHERE dispatch_date >= ${date}::date
+          AND dispatch_date <= ${dateTo}::date
+          GROUP BY analysis_category
           ORDER BY analysis_category
         `,
         sql`
           SELECT * FROM daily_tour_metrics
-          WHERE dispatch_date = ${date}
+          WHERE dispatch_date >= ${date}::date
+          AND dispatch_date <= ${dateTo}::date
           AND (analysis_category = ${category} OR ${category} = 'Overall')
-          ORDER BY is_bulk DESC, unique_drops DESC
+          ORDER BY dispatch_date DESC, is_bulk DESC, unique_drops DESC
+          LIMIT 500
         `,
         sql`
-          SELECT * FROM emirates_daily
-          WHERE dispatch_date = ${date}
+          SELECT analysis_category, city,
+            SUM(total_orders) AS total_orders, SUM(total_drops) AS total_drops,
+            SUM(completed_orders) AS completed_orders, SUM(failed_orders) AS failed_orders,
+            SUM(total_volume_cbm) AS total_volume_cbm,
+            ROUND(SUM(failed_orders)::numeric/NULLIF(SUM(total_orders),0)*100,2) AS rejection_pct
+          FROM emirates_daily
+          WHERE dispatch_date >= ${date}::date
+          AND dispatch_date <= ${dateTo}::date
           AND analysis_category = ${category}
+          GROUP BY analysis_category, city
           ORDER BY total_drops DESC
         `
       ])
-
-      return Response.json({ date, summary, tours, emirates: emiratesData })
+      return Response.json({ date, dateTo, isRange: true, summary, tours, emirates: emiratesData })
     }
 
     // ── MTD view ──────────────────────────────────────────────────────────────

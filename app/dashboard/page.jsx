@@ -274,10 +274,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!selectedDate) return
     setLoading(true)
-    fetch(`/api/analytics?view=daily&date=${selectedDate}&category=Overall`)
+    const to = dateTo && dateTo >= selectedDate ? dateTo : selectedDate
+    fetch(`/api/analytics?view=daily&date=${selectedDate}&dateTo=${to}&category=Overall`)
       .then(r=>r.json()).then(d=>{ setDailyData(d); setLoading(false) })
       .catch(()=>setLoading(false))
-  }, [selectedDate])
+  }, [selectedDate, dateTo])
 
   // Sync dateTo to be at least selectedDate
   useEffect(() => {
@@ -474,9 +475,10 @@ export default function Dashboard() {
       {/* KPI strip */}
       {summary.length > 0 && (() => {
         const ov = summary.find(r=>r.analysis_category==='Overall') || {}
+        const rangeLabel = dailyData?.isRange ? `${selectedDate} → ${dateTo}` : selectedDate
         return (
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:'1.25rem'}}>
-            <KPI label="Total tours"       value={num(ov.included_tours)}          sub="included"/>
+            <KPI label="Total tours"       value={num(ov.included_tours)}          sub={rangeLabel}/>
             <KPI label="Total drops"       value={num(ov.total_drops)}             sub="unique locations"/>
             <KPI label="Avg drops/route"   value={dec(ov.overall_avg_drops)}       sub="all routes"/>
             <KPI label="Avg excl. single"  value={dec(ov.avg_drops_excl_single)}   sub="multi-drop only"/>
@@ -502,7 +504,7 @@ export default function Dashboard() {
       {/* ── DAILY TAB ────────────────────────────────────────────────────────── */}
       {activeTab==='daily' && !loading && (
         <>
-          <MetricMatrix data={summary} title={`Daily metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}`}/>
+          <MetricMatrix data={summary} title={`${dailyData?.isRange ? "Range" : "Daily"} metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}`}/>
 
           <Card>
             <SectionTitle>Tour detail</SectionTitle>
