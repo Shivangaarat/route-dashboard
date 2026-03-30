@@ -519,7 +519,7 @@ export default function Dashboard() {
     const multiTours = included.filter(t=>t.route_type==='Multi')
     const avgDropsExcl = multiTours.length
       ? parseFloat((multiTours.reduce((s,t)=>s+(Number(t.unique_drops)||0),0)/multiTours.length).toFixed(2)) : 0
-    const bulkCount = included.filter(t=>t.is_bulk).length
+    const bulkCount = included.filter(t=>t.route_type==='Single' && t.volume_util_pct!=null && Number(t.volume_util_pct)>=80).length
     const utilTours = included.filter(t=>t.volume_util_pct!=null && !isNaN(Number(t.volume_util_pct)))
     const avgUtil = utilTours.length > 0
       ? parseFloat((utilTours.reduce((s,t)=>s+(Number(t.volume_util_pct)||0),0)/utilTours.length).toFixed(2))
@@ -633,7 +633,7 @@ export default function Dashboard() {
             <KPI label="Avg drops/route"   value={dec(ov.overall_avg_drops)}       sub="all routes"/>
             <KPI label="Avg excl. single"  value={dec(ov.avg_drops_excl_single)}   sub="multi-drop only"/>
             <KPI label="Single drops"      value={num(ov.single_drop_count)}       sub="1–2 location routes"/>
-            <KPI label="Bulk routes"       value={num(ov.bulk_route_count)}        sub="multi + ≥80% util" color={C.purple}/>
+            <KPI label="Bulk routes"       value={num(ov.bulk_route_count)}        sub="single drop + ≥80% util" color={C.purple}/>
             <KPI label="CBM utilisation"   value={pct(ov.avg_volume_util_pct)}     color={clr(ov.avg_volume_util_pct)}/>
             <KPI label="Rejection rate"    value={pct(ov.daily_rejection_pct)}     color={rclr(ov.daily_rejection_pct)}/>
             <KPI label="RD %"             value={pct(ov.rd_pct)}                  color={rclr(ov.rd_pct)} sub="re-deliveries"/>
