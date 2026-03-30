@@ -34,15 +34,18 @@ export async function GET(request) {
         ORDER BY dispatch_date DESC
         LIMIT 90
       `
-      // Also fetch available operating units
+      // Fetch available operating units - simple distinct query
       const ouRows = await sql`
-        SELECT DISTINCT TRIM(ou_val) AS ou
-        FROM daily_tour_metrics,
-             LATERAL UNNEST(STRING_TO_ARRAY(COALESCE(operating_unit,''), ',')) AS ou_val
-        WHERE ou_val IS NOT NULL AND TRIM(ou_val) != ''
-        ORDER BY ou
+        SELECT DISTINCT operating_unit AS ou
+        FROM daily_tour_metrics
+        WHERE operating_unit IS NOT NULL AND operating_unit != ''
+        ORDER BY operating_unit
       `
-      return Response.json({ dates: rows, operating_units: ouRows.map(r => r.ou) })
+      // operating_unit may be comma-separated, split and deduplicate
+      const allOUs = [...new Set(
+        ouRows.flatMap(r => r.ou.split(',').map(s => s.trim()).filter(Boolean))
+      )].sort()
+      return Response.json({ dates: rows, operating_units: allOUs })
     }
 
     // ── Daily view (supports single date or date range) ─────────────────────
