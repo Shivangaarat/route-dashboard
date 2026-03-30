@@ -145,31 +145,103 @@ const MetricMatrix = ({data, title}) => {
 }
 
 // ── Tour table ────────────────────────────────────────────────────────────────
-const TourTable = ({tours, filter}) => {
-  const filtered = tours.filter(t =>
-    (filter==='all' || t.analysis_category===filter) && !t.is_excluded
+const TourTable = ({tours, filter, search, onSearchChange}) => {
+  const filtered = tours.filter(t => {
+    if ((filter!=='all') && t.analysis_category!==filter) return false
+    if (t.is_excluded) return false
+    if (search.tour && !t.planned_tour_name?.toLowerCase().includes(search.tour.toLowerCase())) return false
+    if (search.team && !t.team?.toLowerCase().includes(search.team.toLowerCase())) return false
+    if (search.zone && !t.zone?.toLowerCase().includes(search.zone.toLowerCase())) return false
+    if (search.vehicle && !t.vehicle_id?.toLowerCase().includes(search.vehicle.toLowerCase())) return false
+    if (search.own && !t.ownership?.toLowerCase().includes(search.own.toLowerCase())) return false
+    if (search.type && t.route_type?.toLowerCase() !== search.type.toLowerCase()) return false
+    if (search.bulk === 'yes' && !t.is_bulk) return false
+    if (search.bulk === 'no' && t.is_bulk) return false
+    return true
+  })
+
+  const inp = (key, placeholder, width=90) => (
+    <input placeholder={placeholder} value={search[key]||''}
+      onChange={e=>onSearchChange(key, e.target.value)}
+      style={{width,fontSize:11,padding:'3px 6px',borderRadius:6,border:'0.5px solid #ccc',display:'block'}}/>
   )
-  if (!filtered.length) return <div style={{color:'#73726c',fontSize:13,padding:'1rem 0'}}>No tours found for this filter.</div>
+
   return (
-    <Tbl
-      cols={['Tour','Team','Temp','Zone','Vehicle','Own','Orders','Drops','Vol CBM','Util%','Type','Bulk','Rej%']}
-      colWidths={[140,60,70,80,80,70,65,55,75,65,65,50,55]}
-      rows={filtered.map(t=>[
-        <span style={{fontWeight:500}}>{t.planned_tour_name}</span>,
-        t.team,
-        <Pill text={t.temp_category} color={t.temp_category==='Frozen'?C.blue:C.good} bg={t.temp_category==='Frozen'?C.bgBlue:C.bgGood}/>,
-        t.zone||'—',
-        t.vehicle_id||'—',
-        <Pill text={t.ownership||'—'} color={t.ownership==='OWN'?C.good:C.warn} bg={t.ownership==='OWN'?C.bgGood:C.bgWarn}/>,
-        num(t.total_orders),
-        num(t.unique_drops),
-        dec(t.total_volume_cbm,3),
-        t.volume_util_pct!=null ? <span style={{color:clr(t.volume_util_pct)}}>{pct(t.volume_util_pct)}</span> : '—',
-        t.route_type,
-        t.is_bulk ? <Pill text="BULK" color={C.purple} bg="#EEEDFE"/> : '—',
-        <span style={{color:rclr(t.rejection_pct)}}>{pct(t.rejection_pct)}</span>,
-      ])}
-    />
+    <div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,tableLayout:'fixed'}}>
+        <thead>
+          <tr style={{background:'#1F3864'}}>
+            {[['Tour',140],['Team',60],['Temp',70],['Zone',80],['Vehicle',80],['Own',70],['Orders',65],['Drops',55],['Vol CBM',75],['Util%',65],['Type',65],['Bulk',50],['Rej%',55]].map(([c,w])=>(
+              <th key={c} style={{padding:'7px 8px',color:'#fff',fontWeight:500,fontSize:11,textAlign:'left',width:w}}>{c}</th>
+            ))}
+          </tr>
+          <tr style={{background:'#f5f4f0'}}>
+            <td style={{padding:'4px 6px'}}>{inp('tour','Tour name...',130)}</td>
+            <td style={{padding:'4px 6px'}}>{inp('team','Team',50)}</td>
+            <td style={{padding:'4px 6px'}}>
+              <select value={search.temp||''} onChange={e=>onSearchChange('temp',e.target.value)}
+                style={{width:65,fontSize:11,padding:'3px 4px',borderRadius:6,border:'0.5px solid #ccc'}}>
+                <option value="">All</option>
+                <option value="Ambient">Amb</option>
+                <option value="Frozen">Frz</option>
+              </select>
+            </td>
+            <td style={{padding:'4px 6px'}}>{inp('zone','Zone',70)}</td>
+            <td style={{padding:'4px 6px'}}>{inp('vehicle','Vehicle',70)}</td>
+            <td style={{padding:'4px 6px'}}>
+              <select value={search.own||''} onChange={e=>onSearchChange('own',e.target.value)}
+                style={{width:65,fontSize:11,padding:'3px 4px',borderRadius:6,border:'0.5px solid #ccc'}}>
+                <option value="">All</option>
+                <option value="OWN">OWN</option>
+                <option value="D-LEASED">DL</option>
+              </select>
+            </td>
+            <td/><td/>
+            <td/>
+            <td/>
+            <td style={{padding:'4px 6px'}}>
+              <select value={search.type||''} onChange={e=>onSearchChange('type',e.target.value)}
+                style={{width:60,fontSize:11,padding:'3px 4px',borderRadius:6,border:'0.5px solid #ccc'}}>
+                <option value="">All</option>
+                <option value="Single">Single</option>
+                <option value="Multi">Multi</option>
+              </select>
+            </td>
+            <td style={{padding:'4px 6px'}}>
+              <select value={search.bulk||''} onChange={e=>onSearchChange('bulk',e.target.value)}
+                style={{width:45,fontSize:11,padding:'3px 4px',borderRadius:6,border:'0.5px solid #ccc'}}>
+                <option value="">All</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </td>
+            <td/>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length === 0 ? (
+            <tr><td colSpan={13} style={{padding:'12px',color:'#73726c',fontSize:12,textAlign:'center'}}>No tours match filters.</td></tr>
+          ) : filtered.map((t,i)=>(
+            <tr key={i} style={{background:i%2===0?'transparent':'#fafaf8'}}>
+              <td style={{padding:'7px 8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:500,fontSize:12}}>{t.planned_tour_name}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{t.team}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}><Pill text={t.temp_category} color={t.temp_category==='Frozen'?C.blue:C.good} bg={t.temp_category==='Frozen'?C.bgBlue:C.bgGood}/></td>
+              <td style={{padding:'7px 8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12}}>{t.zone||'—'}</td>
+              <td style={{padding:'7px 8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12}}>{t.vehicle_id||'—'}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}><Pill text={t.ownership||'—'} color={t.ownership==='OWN'?C.good:C.warn} bg={t.ownership==='OWN'?C.bgGood:C.bgWarn}/></td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{num(t.total_orders)}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{num(t.unique_drops)}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{dec(t.total_volume_cbm,3)}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{t.volume_util_pct!=null?<span style={{color:clr(t.volume_util_pct)}}>{pct(t.volume_util_pct)}</span>:'—'}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{t.route_type}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}>{t.is_bulk?<Pill text="BULK" color={C.purple} bg="#EEEDFE"/>:'—'}</td>
+              <td style={{padding:'7px 8px',fontSize:12}}><span style={{color:rclr(t.rejection_pct)}}>{pct(t.rejection_pct)}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{fontSize:11,color:'#73726c',marginTop:6}}>{filtered.length} of {tours.filter(t=>!t.is_excluded).length} tours shown</div>
+    </div>
   )
 }
 
@@ -247,6 +319,7 @@ export default function Dashboard() {
   const [rdExpandList, setRdExpandList] = useState(false)
   const [rdFilter, setRdFilter] = useState({})
   const [tourFilter, setTourFilter] = useState('all')
+  const [tourSearch, setTourSearch] = useState({})
   const [emiratesCat, setEmiCat]    = useState('Overall')
   const [exclusions, setExclusions] = useState([])
   const [newExcl, setNewExcl]       = useState('')
@@ -512,7 +585,7 @@ export default function Dashboard() {
 
           <Card>
             <SectionTitle>Tour detail</SectionTitle>
-            <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
               {cats.map(c=>(
                 <button key={c} onClick={()=>setTourFilter(c)} style={{
                   padding:'4px 12px',fontSize:12,borderRadius:8,cursor:'pointer',
@@ -521,8 +594,13 @@ export default function Dashboard() {
                   color:tourFilter===c?C.blue:'#73726c'
                 }}>{c==='all'?'All categories':c}</button>
               ))}
+              {Object.values(tourSearch).some(v=>v) && (
+                <button onClick={()=>setTourSearch({})} style={{padding:'4px 12px',fontSize:12,borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent',color:'#73726c'}}>
+                  Clear filters
+                </button>
+              )}
             </div>
-            <TourTable tours={tours} filter={tourFilter}/>
+            <TourTable tours={tours} filter={tourFilter} search={tourSearch} onSearchChange={(k,v)=>setTourSearch(s=>({...s,[k]:v}))}/>
           </Card>
         </>
       )}
@@ -701,11 +779,12 @@ export default function Dashboard() {
           {/* Expandable re-delivery order list with filters */}
           {rdExpandList && rdData?.redeliveries?.length > 0 && (
             <Card style={{marginBottom:'1rem',border:`1px solid ${C.warn}`}}>
-              <SectionTitle>Re-delivery order list — {rdData.redeliveries.filter(r=>
-                (!rdFilter.task_id || r.task_id?.toLowerCase().includes(rdFilter.task_id.toLowerCase())) &&
-                (!rdFilter.attempts || String(r.total_attempts) === String(rdFilter.attempts)) &&
-                (!rdFilter.delivered || (rdFilter.delivered==='yes'?r.was_delivered:!r.was_delivered))
-              ).length} orders shown</SectionTitle>
+              <SectionTitle>Re-delivery order list — {rdData.redeliveries.filter(r=>{
+                const matchId = !rdFilter.task_id || r.task_id?.toLowerCase().includes(rdFilter.task_id.toLowerCase())
+                const matchAttempts = !rdFilter.attempts || (rdFilter.attempts==='5'?r.total_attempts>=5:Number(r.total_attempts)===Number(rdFilter.attempts))
+                const matchDelivered = !rdFilter.delivered || (rdFilter.delivered==='yes'?r.was_delivered:!r.was_delivered)
+                return matchId && matchAttempts && matchDelivered
+              }).length} orders shown</SectionTitle>
               {/* Filter row */}
               <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
                 <input placeholder="Filter by Order ID..." value={rdFilter.task_id||''} onChange={e=>setRdFilter(f=>({...f,task_id:e.target.value}))}
