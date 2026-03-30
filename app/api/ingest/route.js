@@ -66,8 +66,12 @@ export async function POST(request) {
       const taskStatus = String(get('TASK STATUS','TRANSACTION STATUS') || '').toUpperCase()
       const temperature = String(get('TEMPERATURE') || '')
 
+      // Extract base task ID — strip Locus re-attempt suffix -YYYY-MM-DD-N
+      const baseTaskId = taskId.replace(/-\d{4}-\d{2}-\d{2}-\d+$/, '')
+
       tasks.push({
         task_id:           taskId,
+        base_task_id:      baseTaskId,
         tour_id:           String(get('TOUR ID') || '').trim(),
         planned_tour_name: String(get('PLANNED TOUR NAME') || get('TOUR ID') || '').trim(),
         dispatch_date:     dateStr,
@@ -108,7 +112,7 @@ export async function POST(request) {
     // Pass arrays of values — Postgres inserts all rows in one query
     await sql`
       INSERT INTO raw_tasks (
-        task_id, tour_id, planned_tour_name, dispatch_date, team,
+        task_id, base_task_id, tour_id, planned_tour_name, dispatch_date, team,
         temperature, temp_category, zone, city,
         rider_id, rider_name, vehicle_id, vehicle_name, vehicle_reg,
         location_id, location_name, customer_name,
@@ -118,6 +122,7 @@ export async function POST(request) {
       )
       SELECT * FROM unnest(
         ${tasks.map(t=>t.task_id)}::text[],
+        ${tasks.map(t=>t.base_task_id)}::text[],
         ${tasks.map(t=>t.tour_id)}::text[],
         ${tasks.map(t=>t.planned_tour_name)}::text[],
         ${tasks.map(t=>t.dispatch_date)}::date[],
@@ -146,7 +151,7 @@ export async function POST(request) {
         ${tasks.map(t=>t.category)}::text[],
         ${tasks.map(t=>t.invoice_value)}::numeric[],
         ${tasks.map(t=>t.upload_source)}::text[]
-      ) AS t(task_id,tour_id,planned_tour_name,dispatch_date,team,
+      ) AS t(task_id,base_task_id,tour_id,planned_tour_name,dispatch_date,team,
              temperature,temp_category,zone,city,
              rider_id,rider_name,vehicle_id,vehicle_name,vehicle_reg,
              location_id,location_name,customer_name,
