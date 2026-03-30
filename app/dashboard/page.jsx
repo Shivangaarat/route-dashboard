@@ -509,7 +509,7 @@ export default function Dashboard() {
       {/* ── MTD TAB ──────────────────────────────────────────────────────────── */}
       {activeTab==='mtd' && (
         <>
-          {mtdData?.summary?.length > 0 && (
+          {mtdData?.summary?.length > 0 && mtdData.summary.every(r=>r) && (
             <MetricMatrix data={mtdData.summary} title={`Month-to-date — ${selectedDate?.slice(0,7)}`}/>
           )}
           {mtdDaily.length > 0 && (
@@ -521,20 +521,26 @@ export default function Dashboard() {
                   <span><span style={{display:'inline-block',width:10,height:3,background:C.bad,marginRight:4}}></span>Rejection %</span>
                 </div>
               </div>
-              <div style={{position:'relative',height:260}}>
+              <div style={{position:'relative',height:200}}>
                 <Bar
                   data={{
                     labels: mtdDates,
                     datasets:[
-                      {label:'Avg drops',data:mtdDates.map(d=>mtdDaily.find(r=>r.dispatch_date===d)?.overall_avg_drops||0),backgroundColor:'#85B7EB',borderColor:C.blue,borderWidth:1,yAxisID:'y'},
-                      {label:'Rej %',data:mtdDates.map(d=>mtdDaily.find(r=>r.dispatch_date===d)?.daily_rejection_pct||0),type:'line',borderColor:C.bad,borderWidth:2,pointRadius:4,backgroundColor:'transparent',yAxisID:'y1'},
+                      {label:'Avg drops',data:mtdDates.map(d=>mtdDaily.find(r=>r.dispatch_date===d)?.overall_avg_drops||0),backgroundColor:'#85B7EB',borderColor:C.blue,borderWidth:1},
                     ]
                   }}
-                  options={{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
-                    x:{ticks:{maxRotation:45,font:{size:10}}},
-                    y:{title:{display:true,text:'Avg drops',font:{size:10}}},
-                    y1:{position:'right',title:{display:true,text:'Rej %',font:{size:10}},grid:{display:false}}
-                  }}}
+                  options={{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:45,font:{size:10}}},y:{beginAtZero:true}}}}
+                />
+              </div>
+              <div style={{position:'relative',height:160,marginTop:8}}>
+                <Bar
+                  data={{
+                    labels: mtdDates,
+                    datasets:[
+                      {label:'Rej %',data:mtdDates.map(d=>mtdDaily.find(r=>r.dispatch_date===d)?.daily_rejection_pct||0),backgroundColor:'#F4A8A8',borderColor:C.bad,borderWidth:1},
+                    ]
+                  }}
+                  options={{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{maxRotation:45,font:{size:10}}},y:{beginAtZero:true}}}}
                 />
               </div>
             </Card>
