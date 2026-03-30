@@ -245,6 +245,7 @@ export default function Dashboard() {
   const [pendingDates, setPendingDates] = useState([])
   const [recalcStatus, setRecalcStatus] = useState({})
   const [rdExpandList, setRdExpandList] = useState(false)
+  const [rdFilter, setRdFilter] = useState({})
   const [tourFilter, setTourFilter] = useState('all')
   const [emiratesCat, setEmiCat]    = useState('Overall')
   const [exclusions, setExclusions] = useState([])
@@ -697,32 +698,50 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Expandable re-delivery order list */}
+          {/* Expandable re-delivery order list with filters */}
           {rdExpandList && rdData?.redeliveries?.length > 0 && (
             <Card style={{marginBottom:'1rem',border:`1px solid ${C.warn}`}}>
-              <SectionTitle>Re-delivery order list — {rdData.redeliveries.length} orders</SectionTitle>
+              <SectionTitle>Re-delivery order list — {rdData.redeliveries.filter(r=>
+                (!rdFilter.task_id || r.task_id?.toLowerCase().includes(rdFilter.task_id.toLowerCase())) &&
+                (!rdFilter.attempts || String(r.total_attempts) === String(rdFilter.attempts)) &&
+                (!rdFilter.delivered || (rdFilter.delivered==='yes'?r.was_delivered:!r.was_delivered))
+              ).length} orders shown</SectionTitle>
+              {/* Filter row */}
+              <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+                <input placeholder="Filter by Order ID..." value={rdFilter.task_id||''} onChange={e=>setRdFilter(f=>({...f,task_id:e.target.value}))}
+                  style={{fontSize:12,padding:'4px 10px',borderRadius:8,border:'0.5px solid #ccc',width:200}}/>
+                <select value={rdFilter.attempts||''} onChange={e=>setRdFilter(f=>({...f,attempts:e.target.value}))}
+                  style={{fontSize:12,padding:'4px 10px',borderRadius:8,border:'0.5px solid #ccc'}}>
+                  <option value="">All attempts</option>
+                  <option value="2">2x attempts</option>
+                  <option value="3">3x attempts</option>
+                  <option value="4">4x attempts</option>
+                  <option value="5">5x+ attempts</option>
+                </select>
+                <select value={rdFilter.delivered||''} onChange={e=>setRdFilter(f=>({...f,delivered:e.target.value}))}
+                  style={{fontSize:12,padding:'4px 10px',borderRadius:8,border:'0.5px solid #ccc'}}>
+                  <option value="">All statuses</option>
+                  <option value="yes">Delivered only</option>
+                  <option value="no">Pending only</option>
+                </select>
+                <button onClick={()=>setRdFilter({})} style={{fontSize:12,padding:'4px 12px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
+                  Clear filters
+                </button>
+              </div>
               <Tbl
-                cols={['Order ID','Attempts','1st Attempt','Last Attempt','Days','Final Status','Delivered']}
-                colWidths={[200,70,110,110,70,120,80]}
-                rows={rdData.redeliveries.map(r=>[
+                cols={['Order ID','Attempts','1st Attempt','Last Attempt','Days','Delivered']}
+                colWidths={[220,80,110,110,80,100]}
+                rows={rdData.redeliveries.filter(r=>
+                  (!rdFilter.task_id || r.task_id?.toLowerCase().includes(rdFilter.task_id.toLowerCase())) &&
+                  (!rdFilter.attempts || String(r.total_attempts) === String(rdFilter.attempts)) &&
+                  (!rdFilter.delivered || (rdFilter.delivered==='yes'?r.was_delivered:!r.was_delivered))
+                ).map(r=>[
                   <span style={{fontFamily:'monospace',fontSize:11,color:C.blue}}>{r.task_id}</span>,
-                  <span style={{
-                    color:r.total_attempts>3?C.bad:r.total_attempts>2?C.warn:C.good,
-                    fontWeight:600,fontSize:13
-                  }}>{r.total_attempts}x</span>,
+                  <span style={{color:r.total_attempts>3?C.bad:r.total_attempts>2?C.warn:C.good,fontWeight:600,fontSize:13}}>{r.total_attempts}x</span>,
                   <span style={{fontSize:12}}>{r.first_attempt_date}</span>,
                   <span style={{fontSize:12}}>{r.last_attempt_date}</span>,
-                  <span style={{color:r.days_to_deliver>5?C.bad:r.days_to_deliver>2?C.warn:C.good,fontWeight:500}}>
-                    {r.days_to_deliver}d
-                  </span>,
-                  <Pill
-                    text={r.final_status||'Unknown'}
-                    color={r.was_delivered?C.good:C.bad}
-                    bg={r.was_delivered?C.bgGood:C.bgBad}
-                  />,
-                  r.was_delivered
-                    ? <Pill text="✓ Delivered" color={C.good} bg={C.bgGood}/>
-                    : <Pill text="✗ Pending" color={C.bad} bg={C.bgBad}/>,
+                  <span style={{color:r.days_to_deliver>5?C.bad:r.days_to_deliver>2?C.warn:C.good,fontWeight:500}}>{r.days_to_deliver}d</span>,
+                  r.was_delivered ? <Pill text="✓ Delivered" color={C.good} bg={C.bgGood}/> : <Pill text="✗ Pending" color={C.bad} bg={C.bgBad}/>,
                 ])}
               />
             </Card>
