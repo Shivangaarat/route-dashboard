@@ -232,7 +232,8 @@ export default function Dashboard() {
   const [activeTab, setTab]         = useState('daily')
   const [dates, setDates]           = useState([])
   const [selectedDate, setDate]     = useState('')
-  const [selectedMonth, setMonth]   = useState('')
+  const [dateTo, setDateTo]         = useState('')
+  const [selectedMonth, setSelectedMonth] = useState('')
   const [dailyData, setDailyData]   = useState(null)
   const [mtdData, setMtdData]       = useState(null)
   const [ytdData, setYtdData]       = useState(null)
@@ -260,7 +261,11 @@ export default function Dashboard() {
   useEffect(() => {
     fetch('/api/analytics?view=dates').then(r=>r.json()).then(d=>{
       setDates(d.dates||[])
-      if (d.dates?.length) setDate(d.dates[0].dispatch_date)
+      if (d.dates?.length) {
+        setDate(d.dates[d.dates.length-1].dispatch_date)
+        setDateTo(d.dates[0].dispatch_date)
+        setSelectedMonth(d.dates[0].dispatch_date?.slice(0,7))
+      }
     })
     loadVehicleMaster()
   }, [])
@@ -274,14 +279,19 @@ export default function Dashboard() {
       .catch(()=>setLoading(false))
   }, [selectedDate])
 
-  // Load MTD when month changes or tab switches
+  // Sync dateTo to be at least selectedDate
   useEffect(() => {
-    if (activeTab !== 'mtd' && activeTab !== 'daily') return
-    const month = selectedDate ? selectedDate.slice(0,7) : selectedMonth
+    if (dateTo && dateTo < selectedDate) setDateTo(selectedDate)
+  }, [selectedDate])
+
+  // Load MTD when selectedMonth changes or tab switches to mtd
+  useEffect(() => {
+    if (activeTab !== 'mtd') return
+    const month = selectedMonth || selectedDate?.slice(0,7)
     if (!month) return
     fetch(`/api/analytics?view=mtd&month=${month}&category=Overall`)
       .then(r=>r.json()).then(d=>setMtdData(d))
-  }, [selectedDate, selectedMonth, activeTab])
+  }, [selectedMonth, activeTab])
 
   // Load YTD
   useEffect(() => {
@@ -413,11 +423,10 @@ export default function Dashboard() {
             <div style={{fontSize:11,color:'#73726c'}}>From</div>
             <input type="date" value={selectedDate} onChange={e=>setDate(e.target.value)}
               style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff'}}/>
-            <div style={{fontSize:11,color:'#73726c'}}>Available:</div>
-            <select value={selectedDate} onChange={e=>setDate(e.target.value)}
-              style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff',maxWidth:220}}>
-              {dates.map(d=><option key={d.dispatch_date} value={d.dispatch_date}>{d.dispatch_date} — {num(d.total_orders)} orders</option>)}
-            </select>
+            <div style={{fontSize:11,color:'#73726c'}}>To</div>
+            <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+              min={selectedDate}
+              style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff'}}/>
           </div>
           <button onClick={()=>window.open(`/api/export?date=${selectedDate}&format=xlsx`,'_blank')}
             style={{fontSize:12,padding:'5px 14px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
@@ -493,7 +502,7 @@ export default function Dashboard() {
       {/* ── DAILY TAB ────────────────────────────────────────────────────────── */}
       {activeTab==='daily' && !loading && (
         <>
-          <MetricMatrix data={summary} title={`Daily metrics — ${selectedDate}`}/>
+          <MetricMatrix data={summary} title={`Daily metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}`}/>
 
           <Card>
             <SectionTitle>Tour detail</SectionTitle>
@@ -515,8 +524,20 @@ export default function Dashboard() {
       {/* ── MTD TAB ──────────────────────────────────────────────────────────── */}
       {activeTab==='mtd' && (
         <>
+          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:'1rem',flexWrap:'wrap'}}>
+            <div style={{fontSize:12,color:'#73726c'}}>Select month:</div>
+            {['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06',
+              '2026-07','2026-08','2026-09','2026-10','2026-11','2026-12'].map(m => (
+              <button key={m} onClick={()=>setSelectedMonth(m)} style={{
+                padding:'5px 14px',fontSize:12,borderRadius:8,cursor:'pointer',
+                border:`0.5px solid ${selectedMonth===m?C.blue:'#ccc'}`,
+                background:selectedMonth===m?C.bgBlue:'transparent',
+                color:selectedMonth===m?C.blue:'#73726c'
+              }}>{new Date(m+'-01').toLocaleString('default',{month:'short',year:'numeric'})}</button>
+            ))}
+          </div>
           {mtdData?.summary?.length > 0 && mtdData.summary.every(r=>r) && (
-            <MetricMatrix data={mtdData.summary} title={`Month-to-date — ${selectedDate?.slice(0,7)}`}/>
+            <MetricMatrix data={mtdData.summary} title={`Month-to-date — ${selectedMonth}`}/>
           )}
           {mtdDaily.length > 0 && (
             <Card>
