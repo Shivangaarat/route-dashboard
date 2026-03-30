@@ -244,6 +244,7 @@ export default function Dashboard() {
   const [uploadMsg, setUploadMsg]   = useState('')
   const [pendingDates, setPendingDates] = useState([])
   const [recalcStatus, setRecalcStatus] = useState({})
+  const [rdExpandList, setRdExpandList] = useState(false)
   const [tourFilter, setTourFilter] = useState('all')
   const [emiratesCat, setEmiCat]    = useState('Overall')
   const [exclusions, setExclusions] = useState([])
@@ -310,11 +311,13 @@ export default function Dashboard() {
       .then(r=>r.json()).then(d=>setEmirates(d.emirates||[]))
   }, [activeTab, selectedDate])
 
-  // Load Redelivery
+  // Load Redelivery — reload every time tab is clicked
   useEffect(() => {
     if (activeTab !== 'redelivery') return
+    setRD(null)
     fetch('/api/analytics?view=redelivery')
       .then(r=>r.json()).then(d=>setRD(d))
+      .catch(err=>console.error('RD fetch error:', err))
   }, [activeTab])
 
   const loadVehicleMaster = () => {
@@ -673,19 +676,63 @@ export default function Dashboard() {
       {/* ── RE-DELIVERIES TAB ────────────────────────────────────────────────── */}
       {activeTab==='redelivery' && (
         <>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+            <button onClick={()=>{setRD(null);fetch('/api/analytics?view=redelivery').then(r=>r.json()).then(d=>setRD(d))}}
+              style={{fontSize:12,padding:'4px 14px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
+              ↻ Refresh
+            </button>
+          </div>
+          {!rdData && <div style={{color:'#73726c',fontSize:13,padding:'1rem 0'}}>Loading re-deliveries...</div>}
           {rdData?.stats && (
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:'1rem'}}>
-              <KPI label="Total re-deliveries" value={num(rdData.stats.redelivery_count)} color={C.warn}/>
+              <div style={{background:'#faeeda',borderRadius:8,padding:'12px 14px',cursor:'pointer',border:`2px solid ${rdExpandList?'#BA7517':'transparent'}`}}
+                onClick={()=>setRdExpandList(v=>!v)}>
+                <div style={{fontSize:11,color:'#73726c',marginBottom:4}}>Total re-deliveries <span style={{fontSize:10}}>{rdExpandList?'▲':'▼'}</span></div>
+                <div style={{fontSize:22,fontWeight:600,color:C.warn}}>{num(rdData.stats.redelivery_count)}</div>
+                <div style={{fontSize:11,color:'#73726c',marginTop:2}}>click to see order list</div>
+              </div>
               <KPI label="Avg attempts" value={dec(rdData.stats.avg_attempts)} sub="per re-delivered order"/>
               <KPI label="First attempt success" value={num(rdData.stats.first_attempt_success)} color={C.good}/>
               <KPI label="Total tracked orders" value={num(rdData.stats.total_tracked)}/>
             </div>
           )}
+
+          {/* Expandable re-delivery order list */}
+          {rdExpandList && rdData?.redeliveries?.length > 0 && (
+            <Card style={{marginBottom:'1rem',border:`1px solid ${C.warn}`}}>
+              <SectionTitle>Re-delivery order list — {rdData.redeliveries.length} orders</SectionTitle>
+              <Tbl
+                cols={['Order ID','Attempts','1st Attempt','Last Attempt','Days','Final Status','Delivered']}
+                colWidths={[200,70,110,110,70,120,80]}
+                rows={rdData.redeliveries.map(r=>[
+                  <span style={{fontFamily:'monospace',fontSize:11,color:C.blue}}>{r.task_id}</span>,
+                  <span style={{
+                    color:r.total_attempts>3?C.bad:r.total_attempts>2?C.warn:C.good,
+                    fontWeight:600,fontSize:13
+                  }}>{r.total_attempts}x</span>,
+                  <span style={{fontSize:12}}>{r.first_attempt_date}</span>,
+                  <span style={{fontSize:12}}>{r.last_attempt_date}</span>,
+                  <span style={{color:r.days_to_deliver>5?C.bad:r.days_to_deliver>2?C.warn:C.good,fontWeight:500}}>
+                    {r.days_to_deliver}d
+                  </span>,
+                  <Pill
+                    text={r.final_status||'Unknown'}
+                    color={r.was_delivered?C.good:C.bad}
+                    bg={r.was_delivered?C.bgGood:C.bgBad}
+                  />,
+                  r.was_delivered
+                    ? <Pill text="✓ Delivered" color={C.good} bg={C.bgGood}/>
+                    : <Pill text="✗ Pending" color={C.bad} bg={C.bgBad}/>,
+                ])}
+              />
+            </Card>
+          )}
+
           <Card>
-            <SectionTitle>Orders requiring re-delivery</SectionTitle>
+            <SectionTitle>All tracked orders</SectionTitle>
             {rdData?.redeliveries?.length > 0 ? (
               <Tbl
-                cols={['Task ID','Attempts','First attempt','Last attempt','Days to deliver','Final status','Delivered']}
+                cols={['Order ID','Attempts','First attempt','Last attempt','Days to deliver','Final status','Delivered']}
                 colWidths={[180,70,110,110,120,110,80]}
                 rows={rdData.redeliveries.map(r=>[
                   <span style={{fontFamily:'monospace',fontSize:11}}>{r.task_id}</span>,
