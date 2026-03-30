@@ -503,6 +503,39 @@ export default function Dashboard() {
   const summary = dailyData?.summary || []
   const tours   = dailyData?.tours   || []
 
+  // OU-filtered tour metrics — used for KPI strip when OU is selected
+  const ouFilteredTours = selectedOU === 'All'
+    ? tours
+    : tours.filter(t => t.operating_unit && t.operating_unit.includes(selectedOU))
+
+  // Build OU-filtered KPI summary from tour data
+  const ouSummary = selectedOU === 'All' ? null : (() => {
+    const included = ouFilteredTours.filter(t => !t.is_excluded && !t.is_virtual_vehicle)
+    const totalOrders = ouFilteredTours.reduce((s,t)=>s+(t.total_orders||0),0)
+    const failed = ouFilteredTours.reduce((s,t)=>s+(t.failed_orders||0),0)
+    const drops = included.reduce((s,t)=>s+(t.unique_drops||0),0)
+    const avgDrops = included.length ? (drops/included.length).toFixed(2) : 0
+    const multiTours = included.filter(t=>t.route_type==='Multi')
+    const avgDropsExcl = multiTours.length ? (multiTours.reduce((s,t)=>s+(t.unique_drops||0),0)/multiTours.length).toFixed(2) : 0
+    const bulkCount = included.filter(t=>t.is_bulk).length
+    const utilTours = included.filter(t=>t.volume_util_pct!=null)
+    const avgUtil = utilTours.length ? (utilTours.reduce((s,t)=>s+(t.volume_util_pct||0),0)/utilTours.length).toFixed(2) : null
+    const rejPct = totalOrders > 0 ? (failed/totalOrders*100).toFixed(2) : 0
+    return {
+      included_tours: included.length,
+      total_drops: drops,
+      overall_avg_drops: avgDrops,
+      avg_drops_excl_single: avgDropsExcl,
+      single_drop_count: included.filter(t=>t.route_type==='Single').length,
+      bulk_route_count: bulkCount,
+      avg_volume_util_pct: avgUtil,
+      daily_rejection_pct: rejPct,
+      rd_pct: null,
+      first_attempt_success_pct: totalOrders>0 ? ((totalOrders-failed)/totalOrders*100).toFixed(2) : null,
+    }
+  })()
+
+
   // MTD daily series for chart
   const mtdDaily = mtdData?.daily || []
   const mtdDates = [...new Set(mtdDaily.map(r=>r.dispatch_date))].sort()
@@ -526,6 +559,19 @@ export default function Dashboard() {
               min={selectedDate}
               style={{fontSize:12,padding:'5px 10px',borderRadius:8,border:'0.5px solid #ccc',background:'#fff'}}/>
           </div>
+          {availableOUs.length > 0 && (
+            <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+              <span style={{fontSize:11,color:'#73726c'}}>OU:</span>
+              {['All',...availableOUs].map(ou=>(
+                <button key={ou} onClick={()=>setSelectedOU(ou)} style={{
+                  padding:'4px 10px',fontSize:11,borderRadius:8,cursor:'pointer',
+                  border:`0.5px solid ${selectedOU===ou?C.blue:'#ccc'}`,
+                  background:selectedOU===ou?C.bgBlue:'transparent',
+                  color:selectedOU===ou?C.blue:'#73726c',fontWeight:selectedOU===ou?500:400
+                }}>{ou}</button>
+              ))}
+            </div>
+          )}
           <button onClick={()=>window.open(`/api/export?date=${selectedDate}&format=xlsx`,'_blank')}
             style={{fontSize:12,padding:'5px 14px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
             Export Excel
@@ -571,11 +617,11 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       {summary.length > 0 && (() => {
-        const ov = summary.find(r=>r.analysis_category==='Overall') || {}
+        const ov = ouSummary || summary.find(r=>r.analysis_category==='Overall') || {}
         const rangeLabel = dailyData?.isRange ? `${selectedDate} → ${dateTo}` : selectedDate
         return (
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:'1.25rem'}}>
-            <KPI label="Total tours"       value={num(ov.included_tours)}          sub={rangeLabel}/>
+            <KPI label="Total tours"       value={num(ov.included_tours)}          sub={selectedOU !== 'All' ? `OU: ${selectedOU}` : rangeLabel}/>
             <KPI label="Total drops"       value={num(ov.total_drops)}             sub="unique locations"/>
             <KPI label="Avg drops/route"   value={dec(ov.overall_avg_drops)}       sub="all routes"/>
             <KPI label="Avg excl. single"  value={dec(ov.avg_drops_excl_single)}   sub="multi-drop only"/>
@@ -604,10 +650,7 @@ export default function Dashboard() {
           <MetricMatrix data={summary} title={`${dailyData?.isRange ? "Range" : "Daily"} metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}`}/>
 
           <Card>
-            <div style={{marginBottom:12}}>
-            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>{setSelectedOU(v)}} />
-          </div>
-          <SectionTitle>Tour detail</SectionTitle>
+            <SectionTitle>Tour detail</SectionTitle>
             <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
               {cats.map(c=>(
                 <button key={c} onClick={()=>setTourFilter(c)} style={{
@@ -623,7 +666,7 @@ export default function Dashboard() {
                 </button>
               )}
             </div>
-            <TourTable tours={tours} filter={tourFilter} search={tourSearch} onSearchChange={(k,v)=>setTourSearch(s=>({...s,[k]:v}))}/>
+            <TourTable tours={ouFilteredTours} filter={tourFilter} search={tourSearch} onSearchChange={(k,v)=>setTourSearch(s=>({...s,[k]:v}))}/>
           </Card>
         </>
       )}
@@ -642,9 +685,6 @@ export default function Dashboard() {
                 color:selectedMonth===m?C.blue:'#73726c'
               }}>{new Date(m+'-01').toLocaleString('default',{month:'short',year:'numeric'})}</button>
             ))}
-          </div>
-          <div style={{marginBottom:12}}>
-            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
           </div>
           {mtdData?.summary?.length > 0 && mtdData.summary.every(r=>r) && (
             <MetricMatrix data={mtdData.summary} title={`Month-to-date — ${selectedMonth}`}/>
@@ -708,9 +748,6 @@ export default function Dashboard() {
       {/* ── YTD TAB ──────────────────────────────────────────────────────────── */}
       {activeTab==='ytd' && (
         <>
-          <div style={{marginBottom:12}}>
-            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
-          </div>
           {ytdData?.summary?.length > 0 ? (
             <>
               <Card>
@@ -752,9 +789,6 @@ export default function Dashboard() {
       {activeTab==='emirates' && (
         <Card>
           <SectionTitle>Emirates-wise breakdown — {selectedDate}</SectionTitle>
-          <div style={{marginBottom:12}}>
-            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
-          </div>
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
             {['Overall','NHC Ambient','NHC Frozen','HC'].map(c=>(
               <button key={c} onClick={()=>setEmiCat(c)} style={{
@@ -787,9 +821,6 @@ export default function Dashboard() {
       {/* ── RE-DELIVERIES TAB ────────────────────────────────────────────────── */}
       {activeTab==='redelivery' && (
         <>
-          <div style={{marginBottom:12}}>
-            <OUSelector value={selectedOU} options={availableOUs} onChange={v=>setSelectedOU(v)} />
-          </div>
           <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
             <button onClick={()=>{setRD(null);fetch('/api/analytics?view=redelivery').then(r=>r.json()).then(d=>setRD(d))}}
               style={{fontSize:12,padding:'4px 14px',borderRadius:8,border:'0.5px solid #ccc',cursor:'pointer',background:'transparent'}}>
