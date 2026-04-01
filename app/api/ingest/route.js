@@ -8,6 +8,14 @@ import * as XLSX from 'xlsx'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+}
+
 function db() { return neon(process.env.DATABASE_URL) }
 
 function getTempCategory(t) {
