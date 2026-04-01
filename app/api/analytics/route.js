@@ -120,11 +120,11 @@ export async function GET(request) {
     // ── Available dates ─────────────────────────────────────────────────────
     if (view === 'dates') {
       const rows = await sql`
-        SELECT DISTINCT dispatch_date::text, COUNT(*) as tours,
-               SUM(total_orders) as total_orders
+        SELECT dispatch_date::text,
+               included_tours as tours,
+               total_orders
         FROM daily_summary
         WHERE analysis_category = 'Overall'
-        GROUP BY dispatch_date
         ORDER BY dispatch_date DESC
         LIMIT 90
       `
