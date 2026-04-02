@@ -504,87 +504,8 @@ export default function Dashboard() {
   const tours   = dailyData?.tours   || []
   const ouFilter = selectedOU !== 'All'
 
-  // OU-filtered tour metrics
-  const ouFilteredTours = !ouFilter
-    ? tours
-    : tours.filter(t => t.operating_unit && t.operating_unit.includes(selectedOU))
-
-  // Build summary from tour rows (for OU-filtered MetricMatrix)
-  const buildSummaryFromTours = (tourRows) => {
-    return ['Overall','NHC Ambient','NHC Frozen','HC'].map(cat => {
-      const cm = cat === 'Overall' ? tourRows : tourRows.filter(m => m.analysis_category === cat)
-      if (!cm.length) return null
-      const included = cm.filter(m => !m.is_excluded && !m.is_virtual_vehicle)
-      const own      = included.filter(m => m.ownership === 'OWN')
-      const dleased  = included.filter(m => m.ownership === 'D-LEASED')
-      const single   = included.filter(m => m.route_type === 'Single')
-      const multi    = included.filter(m => m.route_type === 'Multi')
-      const bulk     = included.filter(m => m.is_bulk)
-      const totalDrops  = included.reduce((s,m)=>s+Number(m.unique_drops||0),0)
-      const ownDrops    = own.reduce((s,m)=>s+Number(m.unique_drops||0),0)
-      const dlDrops     = dleased.reduce((s,m)=>s+Number(m.unique_drops||0),0)
-      const totalOrders = cm.reduce((s,m)=>s+Number(m.total_orders||0),0)
-      const completed   = cm.reduce((s,m)=>s+Number(m.completed_orders||0),0)
-      const failed      = cm.reduce((s,m)=>s+Number(m.failed_orders||0),0)
-      const overallAvg  = included.length ? parseFloat((totalDrops/included.length).toFixed(2)) : 0
-      const multiAvg    = multi.length ? parseFloat((multi.reduce((s,m)=>s+Number(m.unique_drops||0),0)/multi.length).toFixed(2)) : 0
-      const utilTours   = included.filter(m => m.volume_util_pct != null && !isNaN(Number(m.volume_util_pct)))
-      const avgUtil     = utilTours.length ? parseFloat((utilTours.reduce((s,m)=>s+Number(m.volume_util_pct),0)/utilTours.length).toFixed(2)) : null
-      const rejPct      = totalOrders > 0 ? parseFloat((failed/totalOrders*100).toFixed(2)) : 0
-      const firstAtt    = totalOrders > 0 ? parseFloat((completed/totalOrders*100).toFixed(2)) : 0
-      return {
-        analysis_category: cat, total_tours: cm.length, included_tours: included.length,
-        own_vehicles: own.length, dleased_vehicles: dleased.length,
-        total_drops: totalDrops, own_drops: ownDrops, dleased_drops: dlDrops,
-        own_avg_drops: own.length ? parseFloat((ownDrops/own.length).toFixed(2)) : 0,
-        dleased_avg_drops: dleased.length ? parseFloat((dlDrops/dleased.length).toFixed(2)) : 0,
-        overall_avg_drops: overallAvg, avg_drops_excl_single: multiAvg,
-        single_drop_count: single.length, multi_drop_vehicle_count: multi.length,
-        multi_drop_total: multi.reduce((s,m)=>s+Number(m.unique_drops||0),0),
-        single_drop_vehicle_count: single.length,
-        single_drop_total: single.reduce((s,m)=>s+Number(m.unique_drops||0),0),
-        total_orders: totalOrders, completed_orders: completed, failed_orders: failed,
-        daily_rejection_pct: rejPct, avg_volume_util_pct: avgUtil,
-        bulk_route_count: bulk.length, first_attempt_success_pct: firstAtt,
-        rd_pct: null, rd_pharma_pct: null, rd_medlab_pct: null,
-      }
-    }).filter(Boolean)
-  }
-
-  // Build OU-filtered KPI summary from tour data
-  const ouSummary = selectedOU === 'All' ? null : (() => {
-    const included = ouFilteredTours.filter(t => !t.is_excluded && !t.is_virtual_vehicle)
-    const totalOrders = ouFilteredTours.reduce((s,t)=>s+(Number(t.total_orders)||0),0)
-    const failed = ouFilteredTours.reduce((s,t)=>s+(Number(t.failed_orders)||0),0)
-    const completed = ouFilteredTours.reduce((s,t)=>s+(Number(t.completed_orders)||0),0)
-    const drops = included.reduce((s,t)=>s+(Number(t.unique_drops)||0),0)
-    const avgDrops = included.length ? parseFloat((drops/included.length).toFixed(2)) : 0
-    const multiTours = included.filter(t=>t.route_type==='Multi')
-    const avgDropsExcl = multiTours.length
-      ? parseFloat((multiTours.reduce((s,t)=>s+(Number(t.unique_drops)||0),0)/multiTours.length).toFixed(2)) : 0
-    const bulkCount = included.filter(t=>t.route_type==='Single' && t.volume_util_pct!=null && Number(t.volume_util_pct)>=80).length
-    const utilTours = included.filter(t=>t.volume_util_pct!=null && !isNaN(Number(t.volume_util_pct)))
-    const avgUtil = utilTours.length > 0
-      ? parseFloat((utilTours.reduce((s,t)=>s+(Number(t.volume_util_pct)||0),0)/utilTours.length).toFixed(2))
-      : null
-    const rejPct = totalOrders > 0 ? parseFloat((failed/totalOrders*100).toFixed(2)) : 0
-    const rdOrders = ouFilteredTours.filter(t=>t.rd_orders && t.rd_orders > 0).reduce((s,t)=>s+(Number(t.rd_orders)||0),0)
-    const rdPct = totalOrders > 0 ? parseFloat((rdOrders/totalOrders*100).toFixed(2)) : 0
-    return {
-      included_tours: included.length,
-      total_drops: drops,
-      overall_avg_drops: avgDrops,
-      avg_drops_excl_single: avgDropsExcl,
-      single_drop_count: included.filter(t=>t.route_type==='Single').length,
-      bulk_route_count: bulkCount,
-      avg_volume_util_pct: avgUtil,
-      daily_rejection_pct: rejPct,
-      rd_pct: rdPct,
-      first_attempt_success_pct: totalOrders > 0
-        ? parseFloat((completed/totalOrders*100).toFixed(2)) : null,
-    }
-  })()
-
+  // Tours are already OU-filtered by the API — no need to re-filter on frontend
+  const ouFilteredTours = tours
 
   // MTD daily series for chart
   const mtdDaily = mtdData?.daily || []
@@ -667,7 +588,7 @@ export default function Dashboard() {
 
       {/* KPI strip */}
       {summary.length > 0 && (() => {
-        const ov = ouSummary || summary.find(r=>r.analysis_category==='Overall') || {}
+        const ov = summary.find(r=>r.analysis_category==='Overall') || {}
         const rangeLabel = dailyData?.isRange ? `${selectedDate} → ${dateTo}` : selectedDate
         return (
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:'1.25rem'}}>
@@ -697,7 +618,7 @@ export default function Dashboard() {
       {/* ── DAILY TAB ────────────────────────────────────────────────────────── */}
       {activeTab==='daily' && !loading && (
         <>
-          <MetricMatrix data={ouFilter ? buildSummaryFromTours(ouFilteredTours) : summary} title={`${dailyData?.isRange ? "Range" : "Daily"} metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}${selectedOU !== 'All' ? ` · OU: ${selectedOU}` : ""}`}/>
+          <MetricMatrix data={summary} title={`${dailyData?.isRange ? "Range" : "Daily"} metrics — ${selectedDate}${dateTo && dateTo !== selectedDate ? ` to ${dateTo}` : ""}${selectedOU !== 'All' ? ` · OU: ${selectedOU}` : ""}`}/>
 
           <Card>
             <SectionTitle>Tour detail</SectionTitle>
