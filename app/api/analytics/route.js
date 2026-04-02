@@ -160,17 +160,83 @@ export async function GET(request) {
           return Response.json({ date, dateTo, summary, tours, emirates: emiratesData })
         }
 
-        // OU filter — recalculate summary from filtered tours
-        const tours = await sql`
-          SELECT * FROM daily_tour_metrics
-          WHERE dispatch_date = ${date}
-          AND operating_unit ILIKE '%' || ${ou} || '%'
-          ORDER BY is_bulk DESC, unique_drops DESC
-        `
-        const summary    = buildSummaryFromTours(tours)
-        const emiratesData = buildEmiratesFromTours(tours)
+        // OU filter — aggregate in SQL for accuracy
+        const [ouSummaryRows, ouToursForDisplay] = await Promise.all([
+          sql`
+            SELECT analysis_category,
+              COUNT(*) FILTER (WHERE NOT is_excluded AND NOT is_virtual_vehicle)  AS included_tours,
+              COUNT(*) FILTER (WHERE is_excluded OR is_virtual_vehicle)           AS excluded_tours,
+              COUNT(*) FILTER (WHERE ownership='OWN' AND NOT is_excluded AND NOT is_virtual_vehicle) AS own_vehicles,
+              COUNT(*) FILTER (WHERE ownership='D-LEASED' AND NOT is_excluded AND NOT is_virtual_vehicle) AS dleased_vehicles,
+              SUM(unique_drops) FILTER (WHERE NOT is_excluded AND NOT is_virtual_vehicle) AS total_drops,
+              SUM(unique_drops) FILTER (WHERE ownership='OWN' AND NOT is_excluded AND NOT is_virtual_vehicle) AS own_drops,
+              SUM(unique_drops) FILTER (WHERE ownership='D-LEASED' AND NOT is_excluded AND NOT is_virtual_vehicle) AS dleased_drops,
+              SUM(total_orders) AS total_orders,
+              SUM(completed_orders) AS completed_orders,
+              SUM(failed_orders) AS failed_orders,
+              COUNT(*) FILTER (WHERE route_type='Single' AND NOT is_excluded AND NOT is_virtual_vehicle) AS single_drop_count,
+              COUNT(*) FILTER (WHERE route_type='Multi' AND NOT is_excluded AND NOT is_virtual_vehicle) AS multi_drop_vehicle_count,
+              SUM(unique_drops) FILTER (WHERE route_type='Multi' AND NOT is_excluded AND NOT is_virtual_vehicle) AS multi_drop_total,
+              SUM(unique_drops) FILTER (WHERE route_type='Single' AND NOT is_excluded AND NOT is_virtual_vehicle) AS single_drop_total,
+              COUNT(*) FILTER (WHERE is_bulk AND NOT is_excluded AND NOT is_virtual_vehicle) AS bulk_route_count,
+              ROUND(AVG(volume_util_pct) FILTER (WHERE volume_util_pct IS NOT NULL AND NOT is_excluded AND NOT is_virtual_vehicle),2) AS avg_volume_util_pct
+            FROM daily_tour_metrics
+            WHERE dispatch_date = ${date}
+            AND operating_unit ILIKE '%' || ${ou} || '%'
+            GROUP BY analysis_category
+          `,
+          sql`
+            SELECT * FROM daily_tour_metrics
+            WHERE dispatch_date = ${date}
+            AND operating_unit ILIKE '%' || ${ou} || '%'
+            ORDER BY is_bulk DESC, unique_drops DESC
+          `
+        ])
+
+        // Reuse the buildSummaryFromSQL helper defined in date range section
+        const buildSummaryFromSQL = (rows) => {
+          return ['Overall','NHC Ambient','NHC Frozen','HC'].map(cat => {
+            const catRows = cat === 'Overall' ? rows : rows.filter(r => r.analysis_category === cat)
+            if (!catRows.length) return null
+            const totalDrops  = catRows.reduce((s,r)=>s+Number(r.total_drops||0),0)
+            const ownDrops    = catRows.reduce((s,r)=>s+Number(r.own_drops||0),0)
+            const dlDrops     = catRows.reduce((s,r)=>s+Number(r.dleased_drops||0),0)
+            const totalOrders = catRows.reduce((s,r)=>s+Number(r.total_orders||0),0)
+            const completed   = catRows.reduce((s,r)=>s+Number(r.completed_orders||0),0)
+            const failed      = catRows.reduce((s,r)=>s+Number(r.failed_orders||0),0)
+            const included    = catRows.reduce((s,r)=>s+Number(r.included_tours||0),0)
+            const own         = catRows.reduce((s,r)=>s+Number(r.own_vehicles||0),0)
+            const dl          = catRows.reduce((s,r)=>s+Number(r.dleased_vehicles||0),0)
+            const single      = catRows.reduce((s,r)=>s+Number(r.single_drop_count||0),0)
+            const multi       = catRows.reduce((s,r)=>s+Number(r.multi_drop_vehicle_count||0),0)
+            const bulk        = catRows.reduce((s,r)=>s+Number(r.bulk_route_count||0),0)
+            const multiTotal  = catRows.reduce((s,r)=>s+Number(r.multi_drop_total||0),0)
+            const utilRows    = catRows.filter(r=>r.avg_volume_util_pct!=null)
+            const avgUtil     = utilRows.length ? parseFloat((utilRows.reduce((s,r)=>s+Number(r.avg_volume_util_pct),0)/utilRows.length).toFixed(2)) : null
+            return {
+              analysis_category: cat, included_tours: included,
+              own_vehicles: own, dleased_vehicles: dl,
+              total_drops: totalDrops, own_drops: ownDrops, dleased_drops: dlDrops,
+              own_avg_drops: own > 0 ? parseFloat((ownDrops/own).toFixed(2)) : 0,
+              dleased_avg_drops: dl > 0 ? parseFloat((dlDrops/dl).toFixed(2)) : 0,
+              overall_avg_drops: included > 0 ? parseFloat((totalDrops/included).toFixed(2)) : 0,
+              avg_drops_excl_single: multi > 0 ? parseFloat((multiTotal/multi).toFixed(2)) : 0,
+              single_drop_count: single, multi_drop_vehicle_count: multi,
+              multi_drop_total: multiTotal, single_drop_vehicle_count: single,
+              single_drop_total: catRows.reduce((s,r)=>s+Number(r.single_drop_total||0),0),
+              total_orders: totalOrders, completed_orders: completed, failed_orders: failed,
+              daily_rejection_pct: totalOrders > 0 ? parseFloat((failed/totalOrders*100).toFixed(2)) : 0,
+              avg_volume_util_pct: avgUtil, bulk_route_count: bulk,
+              first_attempt_success_pct: totalOrders > 0 ? parseFloat((completed/totalOrders*100).toFixed(2)) : 0,
+              rd_pct: null, rd_pharma_pct: null, rd_medlab_pct: null,
+            }
+          }).filter(Boolean)
+        }
+
+        const summary = buildSummaryFromSQL(ouSummaryRows)
+        const emiratesData = buildEmiratesFromTours(ouToursForDisplay)
           .filter(r => category === 'Overall' || r.analysis_category === category)
-        return Response.json({ date, dateTo, summary, tours, emirates: emiratesData, ou })
+        return Response.json({ date, dateTo, summary, tours: ouToursForDisplay, emirates: emiratesData, ou })
       }
 
       // Date range
@@ -231,17 +297,94 @@ export async function GET(request) {
         return Response.json({ date, dateTo, isRange: true, summary, tours, emirates: emiratesData })
       }
 
-      // Date range + OU filter
-      const tours = await sql`
-        SELECT * FROM daily_tour_metrics
-        WHERE dispatch_date >= ${date}::date AND dispatch_date <= ${dateTo}::date
-        AND operating_unit ILIKE '%' || ${ou} || '%'
-        ORDER BY dispatch_date DESC, is_bulk DESC, unique_drops DESC LIMIT 500
-      `
-      const summary    = buildSummaryFromTours(tours)
-      const emiratesData = buildEmiratesFromTours(tours)
-        .filter(r => category === 'Overall' || r.analysis_category === category)
-      return Response.json({ date, dateTo, isRange: true, summary, tours, emirates: emiratesData, ou })
+      // Date range + OU filter — aggregate in SQL for accuracy
+      const [ouSummaryRows, ouToursForDisplay, ouEmirates] = await Promise.all([
+        sql`
+          SELECT analysis_category,
+            COUNT(*) FILTER (WHERE NOT is_excluded AND NOT is_virtual_vehicle)  AS included_tours,
+            COUNT(*) FILTER (WHERE is_excluded OR is_virtual_vehicle)           AS excluded_tours,
+            COUNT(*) FILTER (WHERE ownership='OWN' AND NOT is_excluded AND NOT is_virtual_vehicle) AS own_vehicles,
+            COUNT(*) FILTER (WHERE ownership='D-LEASED' AND NOT is_excluded AND NOT is_virtual_vehicle) AS dleased_vehicles,
+            SUM(unique_drops) FILTER (WHERE NOT is_excluded AND NOT is_virtual_vehicle) AS total_drops,
+            SUM(unique_drops) FILTER (WHERE ownership='OWN' AND NOT is_excluded AND NOT is_virtual_vehicle) AS own_drops,
+            SUM(unique_drops) FILTER (WHERE ownership='D-LEASED' AND NOT is_excluded AND NOT is_virtual_vehicle) AS dleased_drops,
+            SUM(total_orders) AS total_orders,
+            SUM(completed_orders) AS completed_orders,
+            SUM(failed_orders) AS failed_orders,
+            COUNT(*) FILTER (WHERE route_type='Single' AND NOT is_excluded AND NOT is_virtual_vehicle) AS single_drop_count,
+            COUNT(*) FILTER (WHERE route_type='Multi' AND NOT is_excluded AND NOT is_virtual_vehicle) AS multi_drop_vehicle_count,
+            SUM(unique_drops) FILTER (WHERE route_type='Multi' AND NOT is_excluded AND NOT is_virtual_vehicle) AS multi_drop_total,
+            SUM(unique_drops) FILTER (WHERE route_type='Single' AND NOT is_excluded AND NOT is_virtual_vehicle) AS single_drop_total,
+            COUNT(*) FILTER (WHERE is_bulk AND NOT is_excluded AND NOT is_virtual_vehicle) AS bulk_route_count,
+            ROUND(AVG(volume_util_pct) FILTER (WHERE volume_util_pct IS NOT NULL AND NOT is_excluded AND NOT is_virtual_vehicle),2) AS avg_volume_util_pct
+          FROM daily_tour_metrics
+          WHERE dispatch_date >= ${date}::date AND dispatch_date <= ${dateTo}::date
+          AND operating_unit ILIKE '%' || ${ou} || '%'
+          GROUP BY analysis_category
+        `,
+        sql`
+          SELECT * FROM daily_tour_metrics
+          WHERE dispatch_date >= ${date}::date AND dispatch_date <= ${dateTo}::date
+          AND operating_unit ILIKE '%' || ${ou} || '%'
+          ORDER BY dispatch_date DESC, is_bulk DESC, unique_drops DESC LIMIT 500
+        `,
+        sql`
+          SELECT analysis_category, city,
+            SUM(total_orders) AS total_orders, SUM(total_drops) AS total_drops,
+            SUM(completed_orders) AS completed_orders, SUM(failed_orders) AS failed_orders,
+            SUM(total_volume_cbm) AS total_volume_cbm,
+            ROUND(SUM(failed_orders)::numeric/NULLIF(SUM(total_orders),0)*100,2) AS rejection_pct
+          FROM emirates_daily
+          WHERE dispatch_date >= ${date}::date AND dispatch_date <= ${dateTo}::date
+          AND analysis_category = ${category}
+          GROUP BY analysis_category, city ORDER BY total_drops DESC
+        `
+      ])
+
+      // Build summary from SQL aggregation
+      const buildSummaryFromSQL = (rows) => {
+        return ['Overall','NHC Ambient','NHC Frozen','HC'].map(cat => {
+          const catRows = cat === 'Overall' ? rows : rows.filter(r => r.analysis_category === cat)
+          if (!catRows.length) return null
+          const totalDrops  = catRows.reduce((s,r)=>s+Number(r.total_drops||0),0)
+          const ownDrops    = catRows.reduce((s,r)=>s+Number(r.own_drops||0),0)
+          const dlDrops     = catRows.reduce((s,r)=>s+Number(r.dleased_drops||0),0)
+          const totalOrders = catRows.reduce((s,r)=>s+Number(r.total_orders||0),0)
+          const completed   = catRows.reduce((s,r)=>s+Number(r.completed_orders||0),0)
+          const failed      = catRows.reduce((s,r)=>s+Number(r.failed_orders||0),0)
+          const included    = catRows.reduce((s,r)=>s+Number(r.included_tours||0),0)
+          const own         = catRows.reduce((s,r)=>s+Number(r.own_vehicles||0),0)
+          const dl          = catRows.reduce((s,r)=>s+Number(r.dleased_vehicles||0),0)
+          const single      = catRows.reduce((s,r)=>s+Number(r.single_drop_count||0),0)
+          const multi       = catRows.reduce((s,r)=>s+Number(r.multi_drop_vehicle_count||0),0)
+          const bulk        = catRows.reduce((s,r)=>s+Number(r.bulk_route_count||0),0)
+          const multiTotal  = catRows.reduce((s,r)=>s+Number(r.multi_drop_total||0),0)
+          const utilRows    = catRows.filter(r=>r.avg_volume_util_pct!=null)
+          const avgUtil     = utilRows.length ? parseFloat((utilRows.reduce((s,r)=>s+Number(r.avg_volume_util_pct),0)/utilRows.length).toFixed(2)) : null
+          return {
+            analysis_category: cat,
+            included_tours: included,
+            own_vehicles: own, dleased_vehicles: dl,
+            total_drops: totalDrops, own_drops: ownDrops, dleased_drops: dlDrops,
+            own_avg_drops: own > 0 ? parseFloat((ownDrops/own).toFixed(2)) : 0,
+            dleased_avg_drops: dl > 0 ? parseFloat((dlDrops/dl).toFixed(2)) : 0,
+            overall_avg_drops: included > 0 ? parseFloat((totalDrops/included).toFixed(2)) : 0,
+            avg_drops_excl_single: multi > 0 ? parseFloat((multiTotal/multi).toFixed(2)) : 0,
+            single_drop_count: single, multi_drop_vehicle_count: multi,
+            multi_drop_total: multiTotal, single_drop_vehicle_count: single,
+            single_drop_total: catRows.reduce((s,r)=>s+Number(r.single_drop_total||0),0),
+            total_orders: totalOrders, completed_orders: completed, failed_orders: failed,
+            daily_rejection_pct: totalOrders > 0 ? parseFloat((failed/totalOrders*100).toFixed(2)) : 0,
+            avg_volume_util_pct: avgUtil,
+            bulk_route_count: bulk,
+            first_attempt_success_pct: totalOrders > 0 ? parseFloat((completed/totalOrders*100).toFixed(2)) : 0,
+            rd_pct: null, rd_pharma_pct: null, rd_medlab_pct: null,
+          }
+        }).filter(Boolean)
+      }
+
+      const summary = buildSummaryFromSQL(ouSummaryRows)
+      return Response.json({ date, dateTo, isRange: true, summary, tours: ouToursForDisplay, emirates: ouEmirates, ou })
     }
 
     // ── MTD view ────────────────────────────────────────────────────────────
