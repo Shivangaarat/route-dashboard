@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import RejectionTab from './RejectionTab'
 import { Bar, Line, Doughnut } from 'react-chartjs-2'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement,
@@ -518,7 +519,7 @@ export default function Dashboard() {
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'1.25rem',flexWrap:'wrap',gap:8}}>
         <div>
           <h1 style={{fontSize:20,fontWeight:600,margin:0}}>Route Pattern Intelligence</h1>
-          <div style={{fontSize:12,color:'#73726c',marginTop:2}}>Daily · MTD · YTD · Emirates · Re-deliveries · Settings</div>
+          <div style={{fontSize:12,color:'#73726c',marginTop:2}}>Daily · MTD · YTD · Emirates · Re-deliveries · Rejections · Settings</div>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
@@ -608,7 +609,7 @@ export default function Dashboard() {
 
       {/* Tabs */}
       <div style={{display:'flex',gap:4,marginBottom:'1.25rem',flexWrap:'wrap'}}>
-        {[['daily','Daily'],['mtd','MTD'],['ytd','YTD'],['emirates','Emirates'],['redelivery','Re-deliveries'],['vehicles','Vehicle Master'],['settings','Settings']].map(([k,l])=>(
+        {[['daily','Daily'],['mtd','MTD'],['ytd','YTD'],['emirates','Emirates'],['redelivery','Re-deliveries'],['rejections','🚫 Rejections'],['vehicles','Vehicle Master'],['settings','Settings']].map(([k,l])=>(
           <Tab key={k} label={l} active={activeTab===k} onClick={()=>setTab(k)}/>
         ))}
       </div>
@@ -884,6 +885,11 @@ export default function Dashboard() {
             </div>}
           </Card>
         </>
+      )}
+
+      {/* ── REJECTIONS TAB ───────────────────────────────────────────────────── */}
+      {activeTab==='rejections' && (
+        <RejectionTab />
       )}
 
       {/* ── VEHICLE MASTER TAB ───────────────────────────────────────────────── */}
