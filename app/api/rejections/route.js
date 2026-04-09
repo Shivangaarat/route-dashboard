@@ -24,7 +24,7 @@ export async function GET(request) {
     // ── 1. Top N rejection reasons in the date range ──────────────────────────
     const reasons = await sql`
       SELECT
-        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') AS reason,
+        COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN') AS reason,
         COUNT(*)                                           AS total_failed,
         COUNT(DISTINCT customer_name)                      AS unique_clients,
         ROUND(
@@ -57,7 +57,7 @@ export async function GET(request) {
 
     const clientRows = await sql`
       SELECT
-        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown')   AS reason,
+        COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN')   AS reason,
         COALESCE(NULLIF(TRIM(customer_name), ''), 'Unknown') AS client,
         COUNT(*)                                             AS failed_count,
         SUM(invoice_value)                                   AS invoice_value_lost,
@@ -66,7 +66,7 @@ export async function GET(request) {
       FROM raw_tasks
       WHERE dispatch_date BETWEEN ${dateFrom}::date AND ${dateTo}::date
         AND is_failed = TRUE
-        AND COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') = ANY(${reasonNames})
+        AND COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN') = ANY(${reasonNames})
       GROUP BY reason, client, city, zone
       ORDER BY reason, failed_count DESC
     `
@@ -74,13 +74,13 @@ export async function GET(request) {
     // ── Root causes breakdown per reason ──────────────────────────────────────
     const rootCauseRows = await sql`
       SELECT
-        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') AS reason,
+        COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN') AS reason,
         task_status                                        AS root_cause_detail,
         COUNT(*)                                           AS count
       FROM raw_tasks
       WHERE dispatch_date BETWEEN ${dateFrom}::date AND ${dateTo}::date
         AND is_failed = TRUE
-        AND COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') = ANY(${reasonNames})
+        AND COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN') = ANY(${reasonNames})
       GROUP BY reason, task_status
       ORDER BY reason, count DESC
     `
@@ -97,12 +97,12 @@ export async function GET(request) {
     const trend = await sql`
       SELECT
         dispatch_date::text                                 AS date,
-        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown')  AS reason,
+        COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN')  AS reason,
         COUNT(*)                                            AS count
       FROM raw_tasks
       WHERE dispatch_date BETWEEN ${dateFrom}::date AND ${dateTo}::date
         AND is_failed = TRUE
-        AND COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') = ANY(${reasonNames})
+        AND COALESCE(NULLIF(TRIM(UPPER(root_cause)), ''), 'UNKNOWN') = ANY(${reasonNames})
       GROUP BY dispatch_date, reason
       ORDER BY dispatch_date ASC
     `
