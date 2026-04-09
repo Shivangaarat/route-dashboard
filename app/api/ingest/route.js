@@ -109,7 +109,7 @@ export async function POST(request) {
         task_status:       taskStatus,
         is_completed:      isCompleted,
         is_failed:         isFailed,
-        root_cause:        String(get('ROOT CAUSE','Cancel reason','REASON') || '').trim(),
+        root_cause:        String(get('REASON','ROOT CAUSE','Cancel reason') || '').trim(),
         operating_unit:    String(get('OPERATING UNIT','operating_unit') || '').trim(),
         organisation:      String(get('ORGANISATION','Organization') || '').trim(),
         division:          String(get('DIVISION') || '').trim(),

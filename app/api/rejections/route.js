@@ -57,10 +57,10 @@ export async function GET(request) {
 
     const clientRows = await sql`
       SELECT
-        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown')  AS reason,
+        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown')   AS reason,
         COALESCE(NULLIF(TRIM(customer_name), ''), 'Unknown') AS client,
-        COUNT(*)                                            AS failed_count,
-        SUM(invoice_value)                                  AS invoice_value_lost,
+        COUNT(*)                                             AS failed_count,
+        SUM(invoice_value)                                   AS invoice_value_lost,
         city,
         zone
       FROM raw_tasks
@@ -69,6 +69,20 @@ export async function GET(request) {
         AND COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') = ANY(${reasonNames})
       GROUP BY reason, client, city, zone
       ORDER BY reason, failed_count DESC
+    `
+
+    // ── Root causes breakdown per reason ──────────────────────────────────────
+    const rootCauseRows = await sql`
+      SELECT
+        COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') AS reason,
+        task_status                                        AS root_cause_detail,
+        COUNT(*)                                           AS count
+      FROM raw_tasks
+      WHERE dispatch_date BETWEEN ${dateFrom}::date AND ${dateTo}::date
+        AND is_failed = TRUE
+        AND COALESCE(NULLIF(TRIM(root_cause), ''), 'Unknown') = ANY(${reasonNames})
+      GROUP BY reason, task_status
+      ORDER BY reason, count DESC
     `
 
     // ── 3. Aggregate: total failed count for the period ───────────────────────
@@ -116,13 +130,18 @@ export async function GET(request) {
           .filter(t => t.reason === r.reason)
           .map(t => ({ date: t.date, count: Number(t.count) }))
 
+        const rootCauses = rootCauseRows
+          .filter(rc => rc.reason === r.reason)
+          .map(rc => ({ detail: rc.root_cause_detail, count: Number(rc.count) }))
+
         return {
-          reason:            r.reason,
-          total_failed:      Number(r.total_failed),
-          unique_clients:    Number(r.unique_clients),
+          reason:              r.reason,
+          total_failed:        Number(r.total_failed),
+          unique_clients:      Number(r.unique_clients),
           pct_of_all_failures: Number(r.pct_of_all_failures),
-          top_clients:       clients,
-          trend:             reasonTrend,
+          top_clients:         clients,
+          trend:               reasonTrend,
+          root_causes:         rootCauses,
         }
       }),
     }
