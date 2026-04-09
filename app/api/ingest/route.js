@@ -68,14 +68,22 @@ export async function POST(request) {
 
       const dateStr = parseDate(get('DISPATCH DATE','DELIVERY DATE'))
       if (!dateStr || dateStr.length < 10) continue
-      const taskId = String(get('TASK ID') || '').trim()
+      // Handle BOM character on TASK ID column (\uFEFF prefix)
+      const taskId = String(get('TASK ID', '\uFEFFTASK ID', 'ALTERNATE ID') || '').trim()
       if (!taskId) continue
 
-      const taskStatus = String(get('TASK STATUS','TRANSACTION STATUS') || '').toUpperCase()
-      const temperature = String(get('TEMPERATURE') || '')
+      // Support both Locus-style (TASK STATUS) and AKI-style (Final Status / Status)
+      const finalStatus = String(get('Final Status') || '').trim()
+      const rawStatus   = String(get('TASK STATUS','TRANSACTION STATUS','Status') || '').toUpperCase()
+      const taskStatus  = finalStatus ? finalStatus.toUpperCase() : rawStatus
+      const temperature = String(get('TEMPERATURE','Temperature') || '')
 
       // Extract base task ID — strip Locus re-attempt suffix -YYYY-MM-DD-N
       const baseTaskId = taskId.replace(/-\d{4}-\d{2}-\d{2}-\d+$/, '')
+
+      const isCompleted = taskStatus === 'COMPLETED' || taskStatus === 'DELIVERED'
+      const isFailed    = taskStatus === 'REJECTION' ||
+                          ['FAILED','CANCELLED','REJECTED','NOT DELIVERED','UNDELIVERED','HOLD','PARTIAL'].some(s=>taskStatus.includes(s))
 
       tasks.push({
         task_id:           taskId,
@@ -92,20 +100,20 @@ export async function POST(request) {
         rider_name:        String(get('RIDER NAME') || '').trim(),
         vehicle_id:        String(get('VEHICLE ID') || '').trim(),
         vehicle_name:      String(get('VEHICLE NAME') || '').trim(),
-        vehicle_reg:       String(get('VEHICLE REGISTRATION NUMBER') || '').trim(),
+        vehicle_reg:       String(get('VEHICLE REGISTRATION NUMBER', "Tractor's Registration") || '').trim(),
         location_id:       String(get('LOCATION ID') || '').trim(),
         location_name:     String(get('LOCATION NAME') || '').trim(),
         customer_name:     String(get('CUSTOMER NAME') || '').trim(),
         volume_cbm:        parseFloat(get('VOLUME') || 0) || 0,
         weight_kg:         parseFloat(get('WEIGHT') || 0) || 0,
         task_status:       taskStatus,
-        is_completed:      taskStatus === 'COMPLETED',
-        is_failed:         ['FAILED','CANCELLED','REJECTED','NOT DELIVERED','UNDELIVERED'].some(s=>taskStatus.includes(s)),
-        root_cause:        String(get('ROOT CAUSE','Cancel reason') || '').trim(),
+        is_completed:      isCompleted,
+        is_failed:         isFailed,
+        root_cause:        String(get('ROOT CAUSE','Cancel reason','REASON') || '').trim(),
         operating_unit:    String(get('OPERATING UNIT','operating_unit') || '').trim(),
-        organisation:      String(get('ORGANISATION') || '').trim(),
+        organisation:      String(get('ORGANISATION','Organization') || '').trim(),
         division:          String(get('DIVISION') || '').trim(),
-        internal_org:      String(get('INTERNAL ORG') || '').trim(),
+        internal_org:      String(get('INTERNAL ORG','Internal Order') || '').trim(),
         category:          String(get('CATEGORY') || '').trim(),
         invoice_value:     parseFloat(get('INVOICE VALUE') || 0) || null,
         upload_source:     source,
