@@ -11,7 +11,8 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url)
   const dateFrom = searchParams.get('date_from')
   const dateTo   = searchParams.get('date_to') || dateFrom
-  const topN     = parseInt(searchParams.get('top_n') || '3', 10)
+  const topNParam = searchParams.get('top_n') || '3'
+  const topN     = topNParam === 'all' ? 999 : parseInt(topNParam, 10)
 
   if (!dateFrom) {
     return Response.json({ error: 'date_from is required' }, { status: 400 })
