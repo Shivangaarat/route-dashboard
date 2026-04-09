@@ -190,7 +190,17 @@ export async function POST(request) {
         is_failed        = EXCLUDED.is_failed,
         root_cause       = EXCLUDED.root_cause,
         operating_unit   = EXCLUDED.operating_unit,
-        upload_source    = EXCLUDED.upload_source
+        upload_source    = EXCLUDED.upload_source,
+        customer_name    = EXCLUDED.customer_name,
+        location_name    = EXCLUDED.location_name,
+        city             = EXCLUDED.city,
+        zone             = EXCLUDED.zone,
+        organisation     = EXCLUDED.organisation,
+        vehicle_reg      = EXCLUDED.vehicle_reg,
+        rider_name       = EXCLUDED.rider_name,
+        planned_tour_name = EXCLUDED.planned_tour_name,
+        category         = EXCLUDED.category,
+        invoice_value    = EXCLUDED.invoice_value
     `
 
     // ── For single-date uploads only, run KPI immediately ────────────────────
