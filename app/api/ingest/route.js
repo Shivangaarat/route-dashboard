@@ -114,8 +114,16 @@ export async function POST(request) {
 
     if (!tasks.length) return Response.json({ error: 'No valid rows after parsing.' }, { status: 400 })
 
+    // Deduplicate — if same task_id + dispatch_date appears twice in the Excel file,
+    // keep the last occurrence (prevents "ON CONFLICT DO UPDATE affected row twice" error)
+    const seen = new Map()
+    for (const t of tasks) {
+      seen.set(`${t.task_id}||${t.dispatch_date}`, t)
+    }
+    const dedupedTasks = [...seen.values()]
+
     const sql = db()
-    const dates = [...new Set(tasks.map(t => t.dispatch_date))].sort()
+    const dates = [...new Set(dedupedTasks.map(t => t.dispatch_date))].sort()
 
     // ── True bulk INSERT using unnest ─────────────────────────────────────────
     // Pass arrays of values — Postgres inserts all rows in one query
@@ -130,37 +138,37 @@ export async function POST(request) {
         invoice_value, upload_source
       )
       SELECT * FROM unnest(
-        ${tasks.map(t=>t.task_id)}::text[],
-        ${tasks.map(t=>t.base_task_id)}::text[],
-        ${tasks.map(t=>t.tour_id)}::text[],
-        ${tasks.map(t=>t.planned_tour_name)}::text[],
-        ${tasks.map(t=>t.dispatch_date)}::date[],
-        ${tasks.map(t=>t.team)}::text[],
-        ${tasks.map(t=>t.temperature)}::text[],
-        ${tasks.map(t=>t.temp_category)}::text[],
-        ${tasks.map(t=>t.zone)}::text[],
-        ${tasks.map(t=>t.city)}::text[],
-        ${tasks.map(t=>t.rider_id)}::text[],
-        ${tasks.map(t=>t.rider_name)}::text[],
-        ${tasks.map(t=>t.vehicle_id)}::text[],
-        ${tasks.map(t=>t.vehicle_name)}::text[],
-        ${tasks.map(t=>t.vehicle_reg)}::text[],
-        ${tasks.map(t=>t.location_id)}::text[],
-        ${tasks.map(t=>t.location_name)}::text[],
-        ${tasks.map(t=>t.customer_name)}::text[],
-        ${tasks.map(t=>t.volume_cbm)}::numeric[],
-        ${tasks.map(t=>t.weight_kg)}::numeric[],
-        ${tasks.map(t=>t.task_status)}::text[],
-        ${tasks.map(t=>t.is_completed)}::boolean[],
-        ${tasks.map(t=>t.is_failed)}::boolean[],
-        ${tasks.map(t=>t.root_cause)}::text[],
-        ${tasks.map(t=>t.operating_unit)}::text[],
-        ${tasks.map(t=>t.organisation)}::text[],
-        ${tasks.map(t=>t.division)}::text[],
-        ${tasks.map(t=>t.internal_org)}::text[],
-        ${tasks.map(t=>t.category)}::text[],
-        ${tasks.map(t=>t.invoice_value)}::numeric[],
-        ${tasks.map(t=>t.upload_source)}::text[]
+        ${dedupedTasks.map(t=>t.task_id)}::text[],
+        ${dedupedTasks.map(t=>t.base_task_id)}::text[],
+        ${dedupedTasks.map(t=>t.tour_id)}::text[],
+        ${dedupedTasks.map(t=>t.planned_tour_name)}::text[],
+        ${dedupedTasks.map(t=>t.dispatch_date)}::date[],
+        ${dedupedTasks.map(t=>t.team)}::text[],
+        ${dedupedTasks.map(t=>t.temperature)}::text[],
+        ${dedupedTasks.map(t=>t.temp_category)}::text[],
+        ${dedupedTasks.map(t=>t.zone)}::text[],
+        ${dedupedTasks.map(t=>t.city)}::text[],
+        ${dedupedTasks.map(t=>t.rider_id)}::text[],
+        ${dedupedTasks.map(t=>t.rider_name)}::text[],
+        ${dedupedTasks.map(t=>t.vehicle_id)}::text[],
+        ${dedupedTasks.map(t=>t.vehicle_name)}::text[],
+        ${dedupedTasks.map(t=>t.vehicle_reg)}::text[],
+        ${dedupedTasks.map(t=>t.location_id)}::text[],
+        ${dedupedTasks.map(t=>t.location_name)}::text[],
+        ${dedupedTasks.map(t=>t.customer_name)}::text[],
+        ${dedupedTasks.map(t=>t.volume_cbm)}::numeric[],
+        ${dedupedTasks.map(t=>t.weight_kg)}::numeric[],
+        ${dedupedTasks.map(t=>t.task_status)}::text[],
+        ${dedupedTasks.map(t=>t.is_completed)}::boolean[],
+        ${dedupedTasks.map(t=>t.is_failed)}::boolean[],
+        ${dedupedTasks.map(t=>t.root_cause)}::text[],
+        ${dedupedTasks.map(t=>t.operating_unit)}::text[],
+        ${dedupedTasks.map(t=>t.organisation)}::text[],
+        ${dedupedTasks.map(t=>t.division)}::text[],
+        ${dedupedTasks.map(t=>t.internal_org)}::text[],
+        ${dedupedTasks.map(t=>t.category)}::text[],
+        ${dedupedTasks.map(t=>t.invoice_value)}::numeric[],
+        ${dedupedTasks.map(t=>t.upload_source)}::text[]
       ) AS t(task_id,base_task_id,tour_id,planned_tour_name,dispatch_date,team,
              temperature,temp_category,zone,city,
              rider_id,rider_name,vehicle_id,vehicle_name,vehicle_reg,
@@ -192,7 +200,7 @@ export async function POST(request) {
     return Response.json({
       status:      'success',
       rows_parsed: tasks.length,
-      rows_saved:  tasks.length,
+      rows_saved:  dedupedTasks.length,
       dates,
       kpi_results: kpiResults,
       kpi_skipped: skipKPI,
